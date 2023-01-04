@@ -90,7 +90,7 @@ python oncokbETL.py $username $pw $host $service
 #	paste $script_dir/hugo_list $cnv_working_dir/${samID}.temp.cnv.txt |perl $script_dir/filterCNA.pl - $i > $cnv_working_dir/${samID}.tmp2.cnv.txt
 #	echo "Working CNV oncoKB annotation!"
 	#add oncokb token after -b
-#	python $oncokb_package/CnaAnnotator.py -i $cnv_working_dir/${samID}.tmp2.cnv.txt -o $output_dir/${samID}.cnv -t $histo -b 063002e4-9b22-4e69-964f-7fbbe428d92b
+#	python $oncokb_package/CnaAnnotator.py -i $cnv_working_dir/${samID}.tmp2.cnv.txt -o $output_dir/${samID}.cnv -t $histo -b $5
 	#rm $output_dir/*.cnv.txt
 #done
 
