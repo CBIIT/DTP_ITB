@@ -300,10 +300,8 @@ if __name__ == '__main__':
         print(
             '''
             Unable to run without necessary arguments.
-            You need to pass in username and password:
-
-            python oncokbETL.py usernameHere passwordHere
-
+            You need to pass in username, password, host, and service:
+            python oncokbETL.py usernameHere passwordHere host service
             Note: if your password has special characters
             then you will need to escape them using a backslash
             such as \$ or \\"
