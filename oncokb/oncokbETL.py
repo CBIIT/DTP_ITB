@@ -269,11 +269,11 @@ def load(df, engine):
 
 # Driver section.  Checks and sets input args.
 if __name__ == '__main__':
-    if len(sys.argv) == 3:
-        # There are 2 args, allegedly username and password
+    if len(sys.argv) == 5:
+        # There are 4 args, allegedly username and password
         print('Initializing ETL Connections')
-        host = 'fsitgl-oradb02t.ncifcrf.gov'  # Staging Database
-        service = 'dtpstg.ncifcrf.gov'  # Staging Database Service
+        host = sys.argv[3]  # Staging Database
+        service = sys.argv[4]  # Staging Database Service
         port = 1521  # Staging Database port
         username = sys.argv[1]
         pw = sys.argv[2]
