@@ -169,6 +169,15 @@ def blacklist_filter(row):
     else:
         return True
 
+def hugo_map(hugo, hugo_dict):
+		"""
+		Normalizes hugo gene symbols.
+		"""
+    if hugo in hugo_dict:
+        return hugo_dict[hugo]
+    else:
+        return 0      
+
 # ========== END: Define Utility Functions ==========
 
 
@@ -234,15 +243,10 @@ def transform(df, engine):
     df['Chromosome'] = df['Chromosome'].apply(chr_change).copy()
     df.columns = db_cols
     df['CELLLINENAME'] = df['CELLLINENAME'].apply(cell_line_changes).copy()
-    df['HUGOGENESYMBOLSEQNBR'] = df['HUGOGENESYMBOLSEQNBR'].map(hugo_dict).copy()
-    # Remove all rows that have no HUGO Gene mapping
-    df = df[df['HUGOGENESYMBOLSEQNBR'].notna()]
+    df['HUGOGENESYMBOLSEQNBR'] = df['HUGOGENESYMBOLSEQNBR'].apply(hugo_map,hugo_dict=hugo_dict).copy()
 
     # For this column, 0, should be in place of any null or NaN values
     df['VARIANTCLASSSEQNBR'] = df['VARIANTCLASSSEQNBR'].map(var_dict).fillna(0)
-
-    # Clean up other null-y values
-    df = df.fillna('')
 
     # Make Dtypes more efficient for loading
     df = df.convert_dtypes()
