@@ -3,9 +3,10 @@ Loads TSV oncokb annotated MAF files, performs transformations,
 and inserts into COMMON.ONCOKBGENEPANEL oracle table.
 
 Author: A. Gruenberger
-v1.0.10122222
+v1.1.0
 """
 from sqlalchemy import create_engine
+from sqlalchemy.dialects.oracle import NUMBER, VARCHAR2
 import pandas as pd
 import numpy as np
 import os
@@ -19,13 +20,15 @@ sys.modules["cx_Oracle"] = oracledb
 
 # OncoKB NCI-60 Cell Line Names to NCI's CellLineNames in Common.Cellline
 cell_name_map = {
-                'A549': 'A549/ATCC', 'HL_60': 'HL-60(TB)',
+                'A549': 'A549/ATCC',
+                'HL_60': 'HL-60(TB)',
                 'HS578T': 'HS 578T',
                 'LOXIMVI': 'LOX IMVI',
                 'MDA_MB_231': 'MDA-MB-231/ATCC',
                 'NCI_ADR_RES': 'NCI/ADR-RES',
                 'RXF_393': 'RXF 393',
-                'T47D': 'T-47D'
+                'T47D': 'T-47D',
+                'COLO205': 'COLO 205'
                 }
 
 # Blacklist of Hugo_Symbol and HGVSp_Short delimited by a $ from TC Script
@@ -64,6 +67,28 @@ variants_sql = 'SELECT variantclassdescription FROM COMMON.VARIANTCLASS'
 # SQL to load HugoGeneSymbol data from lookup table
 hugo_sql = 'SELECT * FROM COMMON.HUGOGENESYMBOL'
 
+# Oracle specific data type conversion
+oracle_dtypes = {
+    'CELLLINENAME': VARCHAR2(50),
+    'HUGOGENESYMBOLSEQNBR': NUMBER(4, 0),
+    'CHROMOSOME': VARCHAR2(10),
+    'STARTPOSITION': NUMBER(15, 0),
+    'ENDPOSITION': NUMBER(15, 0),
+    'VARIANTCLASSSEQNBR': NUMBER(2, 0),
+    'REFERENCEALLELE': VARCHAR2(250),
+    'ALTALLELE': VARCHAR2(250),
+    'HGVSCDNACHANGE': VARCHAR2(150),
+    'HGVSPROTEINCHANGE': VARCHAR2(150),
+    'EXISTINGVARIANT': VARCHAR2(600),
+    'TOTALREADS': NUMBER(5, 0),
+    'VARIANTADELLEFREQ': NUMBER(5, 4),
+    'SIFT': VARCHAR2(250),
+    'POLYPHEN': VARCHAR2(250),
+    'ONCOGENICITY': VARCHAR2(250),
+    'MUTATIONEFFECT': VARCHAR2(250),
+    'ONCOKBVERSION': VARCHAR2(10)
+}
+
 
 # ========== END: Initializing Variables and Database Connections ==========
 
@@ -72,7 +97,14 @@ hugo_sql = 'SELECT * FROM COMMON.HUGOGENESYMBOL'
 
 def dna_change(dna):
     """Remove Transcript ID from DNA Change"""
-    return dna.split(':')[1]
+    dna_ret = ''
+    try:
+        dna_ret = dna.split(':')[1]
+    except AttributeError:
+        # This occurs when new OncoKB API provides unexpected
+        # values in their latest API changes.
+        return dna_ret
+    return dna_ret
 
 
 def vaf_type_change(vaf):
@@ -81,7 +113,12 @@ def vaf_type_change(vaf):
     the string.  The VAF comes in as a percentage in
     string format, so we need to convert it to decimal.
     """
-    return float(vaf.replace('%', ''))/100
+    vaf_ret = float()
+    try:
+        vaf_ret = float(vaf.replace('%', ''))/100
+    except (AttributeError, ValueError):
+        return float()
+    return vaf_ret
 
 
 def chr_change(ch):
@@ -98,11 +135,11 @@ def read_data(f):
                         'data/{}'.format(f),
                         delimiter='\t',
                         dtype={
-                            'Chromosome': str,
+                            'Chromosome': 'string',
                             'Start_Position': np.int64,
                             'End_Position': np.int64,
                             't_depth': int,
-                            'HGVSc': str
+                            'HGVSc': 'string'
                         },
                         engine='python'
                     )
@@ -177,11 +214,12 @@ def transform(df, engine):
 
     # Trying to adapt TC code to dataFrame here
     # These two should reflect his whole Script
-    df = df[(~df['MUTATION_EFFECT'].str.contains('Unknown') |
-             ~df['ONCOGENIC'].str.contains('Unknown')) |
-            ((df['HIGHEST_LEVEL'].str.len() > 0) |
-             (df['MUTATION_EFFECT_CITATIONS'].str.len() > 0))].copy()
-    df = df[df.apply(blacklist_filter, axis=1)].copy()
+    # 1/11/2023 -- Turned off these filters to collect more rows for DI
+    # df = df[(~df['MUTATION_EFFECT'].str.contains('Unknown') |
+    #        ~df['ONCOGENIC'].str.contains('Unknown')) |
+    #     ((df['HIGHEST_LEVEL'].str.len() > 0) |
+    #      (df['MUTATION_EFFECT_CITATIONS'].str.len() > 0))].copy()
+    # df = df[df.apply(blacklist_filter, axis=1)].copy()
 
     # Specify the index to be sequential serialized
     # instead of serial number from sub dataframe loads
@@ -196,10 +234,18 @@ def transform(df, engine):
     df['Chromosome'] = df['Chromosome'].apply(chr_change).copy()
     df.columns = db_cols
     df['CELLLINENAME'] = df['CELLLINENAME'].apply(cell_line_changes).copy()
-    df['HUGOGENESYMBOLSEQNBR'] = df['HUGOGENESYMBOLSEQNBR'].map(hugo_dict)
+    df['HUGOGENESYMBOLSEQNBR'] = df['HUGOGENESYMBOLSEQNBR'].map(hugo_dict).copy()
+    # Remove all rows that have no HUGO Gene mapping
+    df = df[df['HUGOGENESYMBOLSEQNBR'].notna()]
 
     # For this column, 0, should be in place of any null or NaN values
     df['VARIANTCLASSSEQNBR'] = df['VARIANTCLASSSEQNBR'].map(var_dict).fillna(0)
+
+    # Clean up other null-y values
+    df = df.fillna('')
+
+    # Make Dtypes more efficient for loading
+    df = df.convert_dtypes()
 
     return df
 
@@ -214,18 +260,20 @@ def load(df, engine):
     will be mostly the same each time unless a new 'hit' is identified in
     OncoKB, and would appear here ultimately.
     '''
-    df.to_sql(name='oncokbgenepanel', con=engine, schema='COMMON',
-              if_exists='append', index=False)
+    df.to_sql(
+        name='oncokbgenepanel', dtype=oracle_dtypes, con=engine,
+        schema='COMMON', if_exists='append', index=False
+        )
     print('Data Loaded to Oracle.')
 
 
 # Driver section.  Checks and sets input args.
 if __name__ == '__main__':
-    if len(sys.argv) == 5:
+    if len(sys.argv) == 3:
         # There are 2 args, allegedly username and password
         print('Initializing ETL Connections')
-        host = sys.argv[3]  # Staging Database
-        service = sys.argv[4]  # Staging Database Service
+        host = 'fsitgl-oradb02t.ncifcrf.gov'  # Staging Database
+        service = 'dtpstg.ncifcrf.gov'  # Staging Database Service
         port = 1521  # Staging Database port
         username = sys.argv[1]
         pw = sys.argv[2]
@@ -252,9 +300,9 @@ if __name__ == '__main__':
         print(
             '''
             Unable to run without necessary arguments.
-            You need to pass in username, password, host, and service:
+            You need to pass in username and password:
 
-            python oncokbETL.py usernameHere passwordHere host service
+            python oncokbETL.py usernameHere passwordHere
 
             Note: if your password has special characters
             then you will need to escape them using a backslash
