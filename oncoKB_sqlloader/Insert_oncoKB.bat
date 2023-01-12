@@ -4,8 +4,8 @@ SETLOCAL ENABLEDELAYEDEXPANSION
 echo %DATE% %TIME%
 set DATESTAMP=%DATE:~10,4%%DATE:~4,2%%DATE:~7,2%
 set TIMESTAMP=%TIME:~0,2%%TIME:~3,2%%TIME:~6,2%
-set UserName=zhouy17
-set Password=HappyDB0624
+set UserName=
+set Password=
 set DBServer=DTPSTG.NCIFCRF.GOV
 set FilePath="C:\Temp\test_sqlldr\sqlloader_files"
 echo exit | sqlplus "%UserName%"/"%Password%"@"%DBServer%" @"%FilePath%"\sql\clean_oncoKB_table.sql 
