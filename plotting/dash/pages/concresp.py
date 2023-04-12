@@ -2,11 +2,9 @@ import dash
 from dash import html, dcc, Input,Output,State,ctx
 import dash_bootstrap_components as dbc
 
-from .dataservice import DataService
-
+from .dataservice import dataService
 dash.register_page(__name__, path='/fivedose')
-dataService = DataService()
-expids = dataService.EXPIDS
+#expids = dataService.EXPIDS
 
 ROW_PADDING = {
         "paddingTop":"calc(var(--bs-gutter-x) * .5)",
@@ -19,7 +17,7 @@ left_select = dbc.Card(id='c-sel-card',body=True,children=[
                 dbc.Row(children=[
                     html.Div(className='d-grid', children=[
                         dbc.Label("Select Experiment ID", html_for="expid-dropdown"),
-                        dbc.Select(id="expid-dropdown", options=[{"label":x,"value":x} for x in expids])
+                        dbc.Select(id="expid-dropdown")
                     ])
                 ],style=ROW_PADDING),
                 dbc.Row(children=[
@@ -38,14 +36,27 @@ left_select = dbc.Card(id='c-sel-card',body=True,children=[
     ])
 
 @dash.callback(
+    Output("expid-dropdown","options"),
+    Input("fivedose-nav","id"),
+    State("app-store","data")
+)
+def initialize(nav,data):
+    return [{"label": x, "value": x} for x in data['fivedose_nscs']]
+
+@dash.callback(
     Output(component_id='nsc-dropdown', component_property='options'),
+    Output(component_id='nsc-dropdown', component_property='value'),
     Output(component_id='submit-button', component_property='disabled'),
     Input(component_id='expid-dropdown', component_property='value'),
+    State("app-store","data"),
     prevent_initial_call=True
 )
-def get_nscs(expid):
-    nscs = dataService.NSC_DICT[expid]
-    return [{"label":x,"value":x} for x in nscs], False
+def get_nscs(expid, data):
+    nscs = data['nsc_dict'][expid]
+    if len(nscs) > 0:
+        return [{"label": x, "value": x} for x in nscs], nscs[0], False
+    else:
+        return [], 'None Found', True
 
 @dash.callback(
     Output(component_id='graph-content', component_property='children'),
@@ -109,7 +120,9 @@ layout = dbc.Row(children=[
                 active_tab='conc-resp-all',
                 id='graph-tabs',
             )),
-        dbc.CardBody(html.P('Please select Exp Nbr, NSC'),id='graph-content',)
+        dbc.CardBody(
+            dcc.Loading(id='graph-content-loading',type='default',children=html.Div(html.P('Please select Exp Nbr, NSC'),id='graph-content',))
+        )
         ]),
         width=10
     )
