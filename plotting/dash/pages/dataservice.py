@@ -14,6 +14,9 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from lifelines import KaplanMeierFitter
+import matplotlib.colors as mcolors
+import colorsys
+from plotly.validators.scatter.marker import SymbolValidator
 
 
 class DataService():
@@ -41,6 +44,21 @@ class DataService():
         # Chart Styles
         self.PLOT_STYLE_DF = pd.read_csv(
             os.path.abspath('../dash/assets/plot_styles.csv'))  # /dash/assets/    /dash/pages/
+
+
+        colors = []
+        mcolors.XKCD_COLORS
+        for name, hex in mcolors.CSS4_COLORS.items():
+            rgb = mcolors.hex2color(hex)
+            ihls = colorsys.rgb_to_hls(*rgb)
+            if ihls[2] <= 0.75 and ihls[1] <= 0.65:
+                colors.append(name)
+
+        random.shuffle(colors)
+        self.COLORS = colors
+        symbols = SymbolValidator().values
+        random.shuffle(symbols)
+        self.SYMBOLS = symbols
 
         # exprIds
         # try:
@@ -541,7 +559,7 @@ class DataService():
         pipeline = [
             {
                 '$match': {
-                    'exp_nbr': int(expid)
+                    'expid': expid
                 }
             }, {
                 '$project': {
@@ -682,7 +700,7 @@ class DataService():
         pipeline = [
             {
                 '$match': {
-                    'exp_nbr': int(expid)
+                    'expid': expid
                 }
             }, {
                 '$project': {
@@ -835,11 +853,11 @@ class DataService():
         )
         return fig
 
-    def get_invivo_group_numbers(self, nsc, exp_nbr):
+    def get_invivo_group_numbers(self, nsc, expid):
         pipeline = [
             {
                 '$match': {
-                    'exp_nbr': int(exp_nbr)
+                    'expid': expid
                 }
             }, {
                 '$project': {
@@ -875,7 +893,7 @@ class DataService():
         data = self.INVIVO_COLL.aggregate(pipeline)
         res = [d for d in data]
         print("DEBUG FROM GET INVIVO GROUP NUMBERS:")
-        print(f"NSC: {nsc} | EXP_NUBR: {exp_nbr}")
+        print(f"NSC: {nsc} | EXPID: {expid}")
         print(f"RES:\n {res}")
         print("***********************************************")
 
@@ -885,7 +903,7 @@ class DataService():
         pipeline = [
             {
                 '$match': {
-                    'exp_nbr': int(expid)
+                    'expid': expid
                 }
             }, {
                 '$project': {
@@ -948,15 +966,15 @@ class DataService():
 
         df = None
         for i, w in enumerate(tumor_weights):
-            name = f"animal{i}"
+            name = f"animal {i}"
             if i == 0:
                 df = pd.DataFrame(w)
-                df = df.drop(['tumor_len', 'tumor_wid'], axis=1)
+                df = df[['tumor_wt', 'obs_day']]
                 df.set_index('obs_day', inplace=True)
                 df.columns = [name]
             else:
                 temp_df = pd.DataFrame(w)
-                temp_df = temp_df.drop(['tumor_len', 'tumor_wid'], axis=1)
+                temp_df = temp_df[['tumor_wt', 'obs_day']]
                 temp_df.set_index('obs_day', inplace=True)
                 temp_df.columns = [name]
                 df = pd.concat([df, temp_df], axis=1)
@@ -965,15 +983,15 @@ class DataService():
 
         df = None
         for i, w in enumerate(weights):
-            name = f"animal{i}"
+            name = f"animal {i}"
             if i == 0:
                 df = pd.DataFrame(w)
-                df = df.drop(['weight, obs_nbr, obs_date'], axis=1)
+                df = df[['obs_day','net_weight']]
                 df.set_index('obs_day', inplace=True)
                 df.columns = [name]
             else:
                 temp_df = pd.DataFrame(w)
-                temp_df = temp_df.drop('weight', axis=1)
+                temp_df = temp_df[['obs_day','net_weight']]
                 temp_df.set_index('obs_day', inplace=True)
                 temp_df.columns = [name]
                 df = pd.concat([df, temp_df], axis=1)
@@ -997,7 +1015,7 @@ class DataService():
         data = self.INVIVO_COLL.aggregate([
                 {
                     '$match': {
-                        'exp_nbr': int(expid)
+                        'expid': expid
                     }
                 }, {
                     '$project': {
@@ -1029,7 +1047,7 @@ class DataService():
                         'group_size': '$tgroup.nbr_animals',
                         'animals_nt_wt': '$tgroup.animal.animal_history.net_weight',
                         'animals_md_tm_wt': '$tgroup.animal.tumor_history.tumor_wt',
-                        'animals_obs_days': '$tgroup.animal.animal_history.obs_date',
+                        'animals_obs_days': '$tgroup.animal.animal_history.obs_day',
                         'nsc': {
                             '$arrayElemAt': [
                                 '$tgroup.nsc_therapy.nsc', 0
@@ -1078,27 +1096,36 @@ class DataService():
 
             # Separate all the data into net_wts, tumor_wts
             for animal in group['animal_data']:
-                if obsv_time is None or (obsv_time.size < len(animal[2])):
-                    obsv_time = np.array(animal[2], dtype='M')
                 net_wts.append(animal[0])
                 tum_wts.append(animal[1])
+                if obsv_time is None:
+                    obsv_time = animal[2]
+                elif obsv_time is not None:
+                    if len(obsv_time) < len(animal[2]):
+                        obsv_time = animal[2]
+                else:
+                    print('Error Setting Observation Time')
             if len(net_wts) == 0:
                 continue
             # Some of the data is missing observation timestamps.
-            if obsv_time.size == 0:
-                obsv_time = range(0,len(net_wts[0]-1))
+            #if obsv_time.size == 0:
+            #    obsv_time = range(0,len(net_wts[0])-1)
 
             # Make a dictionary that contains group data organized into DFs
 
             # Make a dataframe that has a mean col
             netwt_df = pd.DataFrame(net_wts).transpose()
             netwt_df['mean'] = netwt_df.mean(axis=1)
-            netwt_df['obsv_time'] = obsv_time
-            netwt_df.set_index('obsv_time', inplace=True)
+            net_wt_obsv_time = obsv_time[:len(netwt_df['mean'])]
+            netwt_df['obsv_time'] = net_wt_obsv_time
+            netwt_df.fillna(method='ffill', inplace=True)
+            netwt_df.set_index('obsv_time', inplace=True,)
 
             tumwt_df = pd.DataFrame(tum_wts).transpose()
             tumwt_df['median'] = tumwt_df.median(axis=1)
-            tumwt_df['obsv_time'] = obsv_time
+            tum_wt_obsv_time = obsv_time[:len(tumwt_df['median'])]
+            tumwt_df['obsv_time'] = tum_wt_obsv_time
+            tumwt_df.fillna(method='ffill', inplace=True)
             tumwt_df.set_index('obsv_time', inplace=True)
 
             # Make two members of data dict at net_wt,tum_wt
@@ -1114,47 +1141,18 @@ class DataService():
         # create the two Figure objects on which we will apply plots
         net_wt = go.Figure()
         tum_wt = go.Figure()
-        # Create a list of colors (temporary idea)
-        colors =[x.strip() for x in '''
-        aliceblue, antiquewhite, aqua, aquamarine, azure,
-        beige, bisque, black, blanchedalmond, blue,
-        blueviolet, brown, burlywood, cadetblue,
-        chartreuse, chocolate, coral, cornflowerblue,
-        cornsilk, crimson, cyan, darkblue, darkcyan,
-        darkgoldenrod, darkgray, darkgrey, darkgreen,
-        darkkhaki, darkmagenta, darkolivegreen, darkorange,
-        darkorchid, darkred, darksalmon, darkseagreen,
-        darkslateblue, darkslategray, darkslategrey,
-        darkturquoise, darkviolet, deeppink, deepskyblue,
-        dimgray, dimgrey, dodgerblue, firebrick,
-        floralwhite, forestgreen, fuchsia, gainsboro,
-        ghostwhite, gold, goldenrod, gray, grey, green,
-        greenyellow, honeydew, hotpink, indianred, indigo,
-        ivory, khaki, lavender, lavenderblush, lawngreen,
-        lemonchiffon, lightblue, lightcoral, lightcyan,
-        lightgoldenrodyellow, lightgray, lightgrey,
-        lightgreen, lightpink, lightsalmon, lightseagreen,
-        lightskyblue, lightslategray, lightslategrey,
-        lightsteelblue, lightyellow, lime, limegreen,
-        linen, magenta, maroon, mediumaquamarine,
-        mediumblue, mediumorchid, mediumpurple,
-        mediumseagreen, mediumslateblue, mediumspringgreen,
-        mediumturquoise, mediumvioletred, midnightblue,
-        mintcream, mistyrose, moccasin, navajowhite, navy,
-        oldlace, olive, olivedrab, orange, orangered,
-        orchid, palegoldenrod, palegreen, paleturquoise,
-        palevioletred, papayawhip, peachpuff, peru, pink,
-        plum, powderblue, purple, red, rosybrown,
-        royalblue, saddlebrown, salmon, sandybrown,
-        seagreen, seashell, sienna, silver, skyblue,
-        slateblue, slategray, slategrey, snow, springgreen,
-        steelblue, tan, teal, thistle, tomato, turquoise,
-        violet, wheat, white, whitesmoke, yellow,
-        yellowgreen
-        '''.split(',')]
 
         # To keep track of the group number as we process data, also used to group data.
         grp_num = 1
+
+        # Ensure unique colors for each trace
+        color_list = random.sample(range(len(self.COLORS)),k=len(data_dict.keys()))
+        # Set up an index value to be incremented over the following loop
+        color_count = 0
+
+        symbol_list = random.sample(range(len(self.SYMBOLS)),k=len(data_dict.keys()))
+        symbol_count = 0
+
         for key in data_dict.keys():
             # Get each dataframe of net weith and tumor from the data dict
             nt_box_data = data_dict[key]['net_wt']
@@ -1195,30 +1193,39 @@ class DataService():
                     tum_box_y.append(y)
 
             # Increment the group number
-            color_num = random.randint(0,len(colors))
-            net_wt.add_trace(
-                go.Box(y=nt_box_y, x=x_vals, name=f'Group {grp_num}', marker=dict(color=colors[color_num])))
-            tum_wt.add_trace(
-                go.Box(y=tum_box_y, x=x_vals, name=f'Group {grp_num}', marker=dict(color=colors[color_num])))
 
-            net_wt.add_trace(
-                go.Scatter(x=nt_mean.index, y=nt_mean, mode='lines+markers', name=f'Group {grp_num} - mean',
-                           line=dict(width=0.5, color=colors[(grp_num - 1)])))
-            tum_wt.add_trace(
-                go.Scatter(x=tum_med.index, y=tum_med, mode='lines+markers', name=f'Group {grp_num} - median',
-                           line=dict(width=0.5, color=colors[(grp_num - 1)])))
+            try:
+                color_num = color_list[color_count]
+                symbol_num = symbol_list[symbol_count]
+                net_wt.add_trace(
+                    go.Box(y=nt_box_y, x=x_vals, name=f'Group {grp_num}', marker=dict(color=self.COLORS[color_num])))
+                tum_wt.add_trace(
+                    go.Box(y=tum_box_y, x=x_vals, name=f'Group {grp_num}', marker=dict(color=self.COLORS[color_num])))
+
+                net_wt.add_trace(
+                    go.Scatter(x=nt_mean.index, y=nt_mean, mode='lines+markers', name=f'Group {grp_num} - Mean',
+                               line=dict(width=0.5, color=self.COLORS[color_num]),
+                               marker=dict(symbol=self.SYMBOLS[symbol_num], color=self.COLORS[color_num])))
+                tum_wt.add_trace(
+                    go.Scatter(x=tum_med.index, y=tum_med, mode='lines+markers', name=f'Group {grp_num} - Median',
+                               line=dict(width=0.5, color=self.COLORS[color_num]),
+                               marker=dict(symbol=self.SYMBOLS[symbol_num], color=self.COLORS[color_num])))
+            except IndexError as e:
+                e.args
             grp_num += 1
+            color_count += 1
+            symbol_count += 1
 
         # After all the boxes are added, we set each figure to be Group mode to handle
         # the repeated X values
         net_wt.update_layout(
             title='Net Weight', title_x=0.5,
-            yaxis_title='Net Weight (g)', xaxis_title='Date Observed',
+            yaxis_title='Net Weight (g)', xaxis_title='Days Post-Implant',
             boxmode='group',  # group boxes together for diff traces of x value
         )
         tum_wt.update_layout(
             title='Tumor Weight', title_x=0.5,
-            yaxis_title='Tumor Weight (mg)', xaxis_title='Date Observed',
+            yaxis_title='Tumor Weight (mg)', xaxis_title='Date Post-Implant',
             boxmode='group',# group boxes together for diff traces of x value
         )
 
@@ -1227,7 +1234,9 @@ class DataService():
         for i in range(1,(len(data)+1)):
             if 'panel' not in data[i-1].keys():
                 data[i-1]['panel'] = '(Panel N/A)'
-            descriptions.append({'group': f'Group {i}', 'description': f'{data[i-1]["schedule"]}, Type- {data[i-1]["group_type"]}, Cell {data[i-1]["cell"]}, Panel {data[i-1]["panel"]}, Size: {data[i-1]["group_size"]}'})
+            if 'nsc' not in data[i-1].keys():
+                data[i-1]['nsc'] = '(No NSC)'
+            descriptions.append({'group': f'Group {i}', 'description': f'Type: {data[i-1]["group_type"]}; NSC: {data[i-1]["nsc"]}; Schedule: {data[i-1]["schedule"]}; Cell {data[i-1]["cell"]}; Panel: {data[i-1]["panel"]}; Size: {data[i-1]["group_size"]}'})
         return {'expid':data[0]['expid'],'net_wt_fig': net_wt, 'tum_wt_fig': tum_wt, 'implant_dt': implant_dt,'staging_dt': staging_dt, 'descriptions': descriptions}
 
 dataService = DataService()

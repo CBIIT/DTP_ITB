@@ -17,13 +17,13 @@ left_select = dbc.Card(id='c-sel-card',body=True,children=[
                 dbc.Row(children=[
                     html.Div(className='d-grid', children=[
                         dbc.Label("Select Experiment ID", html_for="expid-dropdown"),
-                        dbc.Select(id="expid-dropdown")
+                        dcc.Dropdown(id="expid-dropdown")
                     ])
                 ],style=ROW_PADDING),
                 dbc.Row(children=[
                     html.Div(className='d-grid', children=[
                         dbc.Label("Select NSC Number", html_for="nsc-dropdown"),
-                        dbc.Select(id="nsc-dropdown")
+                        dcc.Dropdown(id="nsc-dropdown")
                     ])
                 ],style=ROW_PADDING),
                 dbc.Row(children=[
@@ -41,7 +41,7 @@ left_select = dbc.Card(id='c-sel-card',body=True,children=[
     State("app-store","data")
 )
 def initialize(nav,data):
-    return [{"label": x, "value": x} for x in data['fivedose_nscs']]
+    return [{"label": x, "value": x} for x in data['fd_dict'].keys()]
 
 @dash.callback(
     Output(component_id='nsc-dropdown', component_property='options'),
@@ -52,7 +52,7 @@ def initialize(nav,data):
     prevent_initial_call=True
 )
 def get_nscs(expid, data):
-    nscs = data['nsc_dict'][expid]
+    nscs = data['fd_dict'][expid]
     if len(nscs) > 0:
         return [{"label": x, "value": x} for x in nscs], nscs[0], False
     else:

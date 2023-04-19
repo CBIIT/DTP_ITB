@@ -6,7 +6,6 @@ import dash
 import dash_bootstrap_components as dbc
 from pages.dataservice import dataService
 
-
 app = Dash(
     __name__,
     use_pages=True,
@@ -22,14 +21,14 @@ app = Dash(
 # This is a refactoring adventure to simplify DataService
 @app.callback(
     Output('app-store', 'data'),
+    Output('initializer', 'children'),
     Input('initializer', 'style')
 )
 def initialize(_):
     data_dict = {}
 
-    uniques, nsc_dict = load_exp_ids()
-    data_dict['fivedose_nscs'] = uniques
-    data_dict['nsc_dict'] = nsc_dict
+    fd_dict = load_exp_ids()
+    data_dict['fd_dict'] = fd_dict
     print(f'Five dose exp ids loaded...')
 
     data_dict['compounds'] = load_comp_nscs()
@@ -40,7 +39,7 @@ def initialize(_):
 
     data_dict['onedose_dict'] = get_od_expids()
     print(f'One Dose expIds loaded...')
-    return data_dict
+    return data_dict, html.I('Modules Initialized')
 
     # Functions to load data
 
@@ -86,57 +85,34 @@ def load_comp_nscs():
             ]
 
 
+
+
+
 def load_exp_ids():
-    '''
-    Returns a list of documents, {expid: 'string', fivedose_nsc: number}
-    The expid field is repeated as there are many NSCs in each experiment
-    '''
-    ids = [d for d in
-           (dataService.FIVEDOSE_COLL.aggregate(
-               [
-                   {
-                       '$project': {
-                           'expid': 1,
-                           'nsc': '$tline.nsc',
-                           '_id': 0
-                       }
-                   }, {
-                   '$unwind': {
-                       'path': '$nsc'
-                   }
-               }, {
-                   '$group': {
-                       '_id': {
-                           'expid': '$expid'
-                       },
-                       'nsc': {
-                           '$addToSet': '$nsc'
-                       }
-                   }
-               }, {
-                   '$project': {
-                       'expid': '$_id.expid',
-                       'nsc': 1,
-                       '_id': 0
-                   }
-               }
-               ]
-           ))
-           ]
-    uniques = []
-    nsc_dict = {}
-    for x in ids:
-        uniques.append(x['expid'])
-        nsc_dict[x['expid']] = x['nsc']
-    uniques.sort()
-    return uniques, nsc_dict
+    fd = {}
+    data = [fd.update({d['expid']: fd_helper(d['fivedosensc'])}) for d in
+                dataService.FIVEDOSE_COLL.aggregate([
+                    {
+                        '$project': {
+                            'expid': 1,
+                            'fivedosensc': 1,
+                            '_id': 0
+                        }
+                    }
+                ])
+            ]
+    return fd
+
+
+def fd_helper(d):
+    return [int(d) for d in d.replace('\'', '').split(',')]
 
 
 def get_invivo_expids():
     data = dataService.INVIVO_COLL.aggregate([
         {
             '$project': {
-                'exp_nbr': 1,
+                'expid': 1,
                 'invivonsc': 1,
                 '_id': 0
             }
@@ -146,11 +122,24 @@ def get_invivo_expids():
     invivo_dict = {}
     for invivo in data:
         try:
-            nscs = invivo['invivonsc'].replace('\'', '').split(',')
-            nscs = [int(x) for x in nscs]
-            invivo_dict[str(invivo['exp_nbr'])] = nscs
+            nscs = []
+            if 'invivonsc' in invivo.keys():
+                nscs = invivo['invivonsc'].replace('\'', '').split(',')
+                nscs = [int(x) for x in nscs]
+            if invivo['expid'] in invivo_dict.keys():
+                if len(nscs) > 0:
+                    existing_nscs = invivo_dict[invivo['expid']]
+                    for x in nscs:
+                        if x not in existing_nscs:
+                            existing_nscs.append(x)
+                    existing_nscs.sort()
+                    invivo_dict[invivo['expid']] = existing_nscs
+                else:
+                    invivo_dict[invivo['expid']] = nscs
+            else:
+                invivo_dict[invivo['expid']] = nscs
         except KeyError:
-            continue
+            print(f'KEY ERROR invivo_dict: {invivo}')
     return invivo_dict
 
 
@@ -195,8 +184,11 @@ app.layout = dbc.Container(
         dbc.Row(html.H1('DCTD Graphs and Plots')),
         dbc.Row(dbc.Col(dbc.Navbar(nav), width=12, id='nav-bar-col'), id='nav-bar-row'),
         dbc.Row(dbc.Col(dash.page_container, width=12), id='page-container-col'),
-        dcc.Store(id='app-store'),
-        html.Div(id='initializer')
+        html.Br(),
+        dcc.Loading([
+            dcc.Store(id='app-store'),
+            html.Div(id='initializer')
+        ])
     ]
 )
 # +++++++++++++++++++++++++++++++++++++++++++++++++++
