@@ -3,12 +3,7 @@ import random
 
 import numpy as np
 from dotenv import load_dotenv
-import oracledb
-import sys
 
-oracledb.version = "8.3.0"
-sys.modules["cx_Oracle"] = oracledb
-from sqlalchemy import create_engine
 import pymongo
 import pandas as pd
 import plotly.graph_objects as go
@@ -39,6 +34,7 @@ class DataService():
         self.ONEDOSE_COLL = self.DB.get_collection('onedose')
         self.INVIVO_COLL = self.DB.get_collection('invivo')
         self.COMPOUNDS_COLL = self.DB.get_collection('compounds')
+        self.CELLS_COLL = self.DB.get_collection('fivedose_cells')
         print(f'Collections initialized...')
 
         # Chart Styles
@@ -47,7 +43,6 @@ class DataService():
 
 
         colors = []
-        mcolors.XKCD_COLORS
         for name, hex in mcolors.CSS4_COLORS.items():
             rgb = mcolors.hex2color(hex)
             ihls = colorsys.rgb_to_hls(*rgb)
@@ -60,153 +55,12 @@ class DataService():
         random.shuffle(symbols)
         self.SYMBOLS = symbols
 
-        # exprIds
-        # try:
-        #     if self.EXPIDS:
-        #         pass
-        # except:
-        #     self.load_exp_ids()
-        #     print(f'Five dose exp ids loaded...')
-        #
-        #     self.load_comp_nscs()
-        #     print(f'Compound NSCs loaded...')
-        #
-        #     self.get_invivo_expids()
-        #     print(f'Invivo Exp Nbrs loaded...')
-        #
-        #     self.get_od_expids()
-        #     print(f'One Dose expIds loaded...')
+        # Load unique
 
     def __del__(self):
         #self.engine.dispose(close=True)
         self.CLIENT.close()
         print('Closing connections and destructing.')
-
-    # def load_comp_nscs(self):
-    #     nscs = [d['nsc'] for d in
-    #             (self.COMPOUNDS_COLL.aggregate([
-    #                 {
-    #                     '$match': {
-    #                         'soldata': {
-    #                             '$exists': True
-    #                         },
-    #                         'cas': {
-    #                             '$exists': True
-    #                         },
-    #                         'mf': {
-    #                             '$exists': True
-    #                         },
-    #                         'mw': {
-    #                             '$exists': True
-    #                         },
-    #                         'distribution_code_desc': {
-    #                             '$exists': True
-    #                         },
-    #                         'agreement_type_desc': {
-    #                             '$exists': True
-    #                         },
-    #                         'mv_dtp_disregistration_short': {
-    #                             '$exists': True
-    #                         },
-    #                         'cmpd_chem_name': {
-    #                             '$exists': True
-    #                         }
-    #                     }
-    #                 },{
-    #                     '$project': {
-    #                         '_id':0,
-    #                         'nsc': 1
-    #                     },
-    #
-    #                 }
-    #             ]))
-    #             ]
-    #     self.COMP_NSCS = nscs
-    #
-    # def load_exp_ids(self):
-    #     '''
-    #     Returns a list of documents, {expid: 'string', fivedose_nsc: number}
-    #     The expid field is repeated as there are many NSCs in each experiment
-    #     '''
-    #     ids = [d for d in
-    #            (self.FIVEDOSE_COLL.aggregate(
-    #                [
-    #                    {
-    #                        '$project': {
-    #                            'expid': 1,
-    #                            'nsc': '$tline.nsc',
-    #                            '_id': 0
-    #                        }
-    #                    }, {
-    #                    '$unwind': {
-    #                        'path': '$nsc'
-    #                    }
-    #                }, {
-    #                    '$group': {
-    #                        '_id': {
-    #                            'expid': '$expid'
-    #                        },
-    #                        'nsc': {
-    #                            '$addToSet': '$nsc'
-    #                        }
-    #                    }
-    #                }, {
-    #                    '$project': {
-    #                        'expid': '$_id.expid',
-    #                        'nsc': 1,
-    #                        '_id': 0
-    #                    }
-    #                }
-    #                ]
-    #            ))
-    #            ]
-    #     uniques = []
-    #     nsc_dict = {}
-    #     for x in ids:
-    #         uniques.append(x['expid'])
-    #         nsc_dict[x['expid']] = x['nsc']
-    #     uniques.sort()
-    #     self.EXPIDS = uniques
-    #     self.NSC_DICT = nsc_dict
-    #
-    # def get_invivo_expids(self):
-    #     data = self.INVIVO_COLL.aggregate([
-    #         {
-    #             '$project': {
-    #                 'exp_nbr': 1,
-    #                 'invivonsc': 1,
-    #                 '_id': 0
-    #             }
-    #         }
-    #     ])
-    #     data = [d for d in data]
-    #     invivo_dict = {}
-    #     for invivo in data:
-    #         try:
-    #             nscs = invivo['invivonsc'].replace('\'', '').split(',')
-    #             nscs = [int(x) for x in nscs]
-    #             invivo_dict[str(invivo['exp_nbr'])] = nscs
-    #         except KeyError:
-    #             continue
-    #     self.INVIVO_DICT = invivo_dict
-    #
-    # def get_od_expids(self):
-    #     data = self.ONEDOSE_COLL.aggregate([
-    #         {
-    #             '$project': {
-    #                 'expid': 1,
-    #                 'onedosensc': 1,
-    #                 '_id': 0
-    #             }
-    #         }
-    #     ])
-    #     data = [d for d in data]
-    #     onedose_dict = {}
-    #     for od in data:
-    #         nscs = od['onedosensc'].replace('\'', '').split(',')
-    #         nscs = [int(x) for x in nscs]
-    #         onedose_dict[str(od['expid'])] = nscs
-    #     self.ONEDOSE_DICT = onedose_dict
 
     def get_df_by_nsc(self, nsc, exp_id):
         data = [d for d in
@@ -282,12 +136,6 @@ class DataService():
         df = pd.DataFrame(data)
 
         return df
-
-    def join_panel(self, val, panel_map):
-        for key in panel_map.keys():
-            if val == key:
-                return panel_map[key]
-        return 'not found'
 
     def create_grouped_data_dict(self, df):
         data_dict = dict()
@@ -892,10 +740,6 @@ class DataService():
 
         data = self.INVIVO_COLL.aggregate(pipeline)
         res = [d for d in data]
-        print("DEBUG FROM GET INVIVO GROUP NUMBERS:")
-        print(f"NSC: {nsc} | EXPID: {expid}")
-        print(f"RES:\n {res}")
-        print("***********************************************")
 
         return range(0, res[0]['count'])
 
@@ -1211,7 +1055,7 @@ class DataService():
                                line=dict(width=0.5, color=self.COLORS[color_num]),
                                marker=dict(symbol=self.SYMBOLS[symbol_num], color=self.COLORS[color_num])))
             except IndexError as e:
-                e.args
+                print(e.args)
             grp_num += 1
             color_count += 1
             symbol_count += 1
@@ -1238,5 +1082,81 @@ class DataService():
                 data[i-1]['nsc'] = '(No NSC)'
             descriptions.append({'group': f'Group {i}', 'description': f'Type: {data[i-1]["group_type"]}; NSC: {data[i-1]["nsc"]}; Schedule: {data[i-1]["schedule"]}; Cell {data[i-1]["cell"]}; Panel: {data[i-1]["panel"]}; Size: {data[i-1]["group_size"]}'})
         return {'expid':data[0]['expid'],'net_wt_fig': net_wt, 'tum_wt_fig': tum_wt, 'implant_dt': implant_dt,'staging_dt': staging_dt, 'descriptions': descriptions}
+
+    def get_cell_graphs(self, cell):
+        data = [ d for d in
+                    self.CELLS_COLL.aggregate(
+                    [
+                        {
+                            '$match': {
+                                '_id': cell
+                            }
+                        }
+                    ])
+                ]
+        # Keys are _id, tgi, lhiconc, nsc
+        total = len(data[0]['results'])
+
+        expid = []
+        one = []
+        two = []
+        three = []
+        four = []
+        five = []
+        nsc = []
+        total = len(data[0]['results'])
+
+        for i,d in enumerate(data[0]['results']):
+            try:
+                expid.append(d['expid'])
+            except:
+                print(f'Failed on cell graphs for {d}')
+                expid.append('Failed')
+
+            try:
+                nsc.append(str(d['nsc']))
+            except:
+                print(f'Failed on cell graphs for {d}')
+                nsc.append(str(0))
+
+            try:
+                one.append(d['growth_pct'][0])
+            except IndexError or KeyError:
+                one.append(np.NaN)
+
+            try:
+                two.append(d['growth_pct'][1])
+            except IndexError or KeyError:
+                two.append(np.NaN)
+
+            try:
+                three.append(d['growth_pct'][2])
+            except IndexError or KeyError:
+                three.append(np.NaN)
+
+            try:
+                four.append(d['growth_pct'][3])
+            except IndexError or KeyError:
+                four.append(np.NaN)
+
+            try:
+                five.append(d['growth_pct'][4])
+            except IndexError or KeyError:
+                five.append(np.NaN)
+
+
+
+
+        df = pd.DataFrame({'expid': expid, 'nsc':nsc, 'one':one, 'two': two, 'three': three, 'four': four, 'five': five})
+
+        fig1 = px.scatter(data_frame=df[['nsc','one','expid']].sort_values(by='one',ascending=True), x='nsc', y='one', title=f'First Doses', range_y=[(df['one'].max()*1.1), -110.0])
+        fig2 = px.scatter(data_frame=df[['nsc','two','expid']].sort_values(by='two',ascending=True), x='nsc', y='two', title=f'Second Doses', range_y=[(df['two'].max()*1.1), -110.0])
+        fig3 = px.scatter(data_frame=df[['nsc','three','expid']].sort_values(by='three',ascending=True), x='nsc', y='three', title=f'Thrid Doses', range_y=[(df['three'].max()*1.1), -110.0])
+        fig4 = px.scatter(data_frame=df[['nsc','four','expid']].sort_values(by='four',ascending=True), x='nsc', y='four', title=f'Fourth Doses', range_y=[(df['four'].max()*1.1), -110.0])
+        fig5 = px.scatter(data_frame=df[['nsc','five','expid']].sort_values(by='five',ascending=True), x='nsc', y='five', title=f'Fifth Doses', range_y=[(df['five'].max()*1.1), -110.0])
+
+        figures = [fig1,fig2,fig3,fig4,fig5]
+        return figures
+
 
 dataService = DataService()

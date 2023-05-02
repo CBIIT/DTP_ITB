@@ -39,9 +39,26 @@ def initialize(_):
 
     data_dict['onedose_dict'] = get_od_expids()
     print(f'One Dose expIds loaded...')
+
+    data_dict['nci_60_fd'] = get_fd_cells()
     return data_dict, html.I('Modules Initialized')
 
     # Functions to load data
+
+
+def get_fd_cells():
+    return [d['_id'] for d in
+            (dataService.CELLS_COLL.aggregate(
+                [
+                    {
+                        '$project': {
+                            '_id': 1,
+                            'results': 0
+                        }
+                    }
+                ]
+            ))
+            ]
 
 
 def load_comp_nscs():
@@ -85,21 +102,18 @@ def load_comp_nscs():
             ]
 
 
-
-
-
 def load_exp_ids():
     fd = {}
     data = [fd.update({d['expid']: fd_helper(d['fivedosensc'])}) for d in
-                dataService.FIVEDOSE_COLL.aggregate([
-                    {
-                        '$project': {
-                            'expid': 1,
-                            'fivedosensc': 1,
-                            '_id': 0
-                        }
+            dataService.FIVEDOSE_COLL.aggregate([
+                {
+                    '$project': {
+                        'expid': 1,
+                        'fivedosensc': 1,
+                        '_id': 0
                     }
-                ])
+                }
+            ])
             ]
     return fd
 
@@ -166,9 +180,10 @@ def get_od_expids():
 nav = dbc.Nav(
     [
         dbc.NavItem(dbc.NavLink("Home", active="exact", href="/", id='home-nav')),
+        dbc.NavItem(dbc.NavLink("Invivo", active="exact", href="/invivo", id='invivo-nav')),
         dbc.NavItem(dbc.NavLink("Five Dose", active="exact", href="/fivedose", id='fivedose-nav')),
         dbc.NavItem(dbc.NavLink("One Dose", active="exact", href="/onedose", id='onedose-nav')),
-        dbc.NavItem(dbc.NavLink("Invivo", active="exact", href="/invivo", id='invivo-nav')),
+        dbc.NavItem(dbc.NavLink("By Cell", active="exact", href="/cells", id='cells-nav')),
         dbc.NavItem(dbc.NavLink("Compounds", active="exact", href="/comps", id='comps-nav'))
     ],
     pills=True,
