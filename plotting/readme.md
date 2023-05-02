@@ -10,14 +10,6 @@ The .env file requires values for the following:
 
 `CONN_STRING=mongodb+srv://<username>:<password>@<url>/?retryWrites=true&w=majority`
 
-`USERNAME=<Oracle Username>`
-
-`PW=<Oracle Password>`
-
-`HOST=<Oracle Host>`
-
-`SERVICE=<Oracle Service>`
-
 ## Libraries
     Plotly
     Pandas
@@ -25,8 +17,8 @@ The .env file requires values for the following:
     Dash Bootstrap Components
     Dotenv
     Pymongo
-    Oracledb
-    SqlAlchemy
+    Lifelines
+    Matplotlib (for color functions)
 
 ## Execution
 `python app.py`
