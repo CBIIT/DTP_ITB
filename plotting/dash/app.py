@@ -31,7 +31,7 @@ def initialize(_):
     data_dict['fd_dict'] = fd_dict
     print(f'Five dose exp ids loaded...')
 
-    data_dict['compounds'] = load_comp_nscs()
+    data_dict['compounds'] = load_comps()
     print(f'Compound NSCs loaded...')
 
     data_dict['invivo_dict'] = get_invivo_expids()
@@ -61,42 +61,31 @@ def get_fd_cells():
             ]
 
 
-def load_comp_nscs():
-    return [d['nsc'] for d in
+def load_comps():
+    return [d for d in
             (dataService.COMPOUNDS_COLL.aggregate([
                 {
                     '$match': {
-                        'soldata': {
-                            '$exists': True
-                        },
-                        'cas': {
-                            '$exists': True
-                        },
-                        'mf': {
-                            '$exists': True
-                        },
-                        'mw': {
-                            '$exists': True
-                        },
-                        'distribution_code_desc': {
-                            '$exists': True
-                        },
-                        'agreement_type_desc': {
-                            '$exists': True
-                        },
                         'mv_dtp_disregistration_short': {
                             '$exists': True
                         },
                         'cmpd_chem_name': {
+                            '$exists': True
+                        },
+                        'preferred_name': {
                             '$exists': True
                         }
                     }
                 }, {
                     '$project': {
                         '_id': 0,
-                        'nsc': 1
+                        'nsc': 1,
+                        'name': '$preferred_name'
                     },
-
+                }, {
+                    '$unwind': {
+                        'path': '$name'
+                    }
                 }
             ]))
             ]

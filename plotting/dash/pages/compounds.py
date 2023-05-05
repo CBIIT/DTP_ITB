@@ -1,7 +1,13 @@
+import base64
+
 import dash
-from dash import html, dcc, Input, Output, State
+from dash import html, dcc, Input, Output, State, dash_table
+from dash.exceptions import PreventUpdate
+from rdkit import Chem
+from rdkit.Chem import Draw
 import dash_bootstrap_components as dbc
 from .dataservice import dataService
+from pathlib import Path
 
 dash.register_page(__name__, path='/comps')
 
@@ -17,8 +23,16 @@ left_select = dbc.Card(id='co-sel-card', body=True, children=[
         dbc.Form(id='co-input-form', children=[
             dbc.Row(children=[
                 html.Div(className='d-grid', children=[
-                    dbc.Label("Select NSC", html_for="co-nsc-dropdown"),
-                    dcc.Dropdown(id="co-nsc-dropdown")
+                    dbc.Label("Choose one"),
+                    dbc.RadioItems(
+                        options=[
+                            {"label": "Preferred Name", "value": 1},
+                            {"label": "NSC No.", "value": 2}
+                        ], id='co-radio'),
+                    html.Br(),
+                    dcc.Dropdown(id="co-nsc-dropdown"),
+                    html.Br(),
+                    dbc.Button("Submit", id='co-submit', n_clicks=0)
                 ])
             ], style=ROW_PADDING)
         ])
@@ -26,33 +40,88 @@ left_select = dbc.Card(id='co-sel-card', body=True, children=[
 ])
 
 @dash.callback(
-    Output("co-nsc-dropdown","options"),
-    Input("comps-nav","id"),
-    State("app-store","data")
+    Output("co-nsc-dropdown", "options"),
+    Input("co-nsc-dropdown", "search_value"),
+    State("co-radio", "value")
 )
-def initialize(nav,data):
-    return [{"label": x, "value": x} for x in data['compounds']]
+def initialize(search_value, radio):
+    if not search_value:
+        raise PreventUpdate
+    if radio == 1:
+        results = dataService.COMPOUNDS_COLL.aggregate([
+            {
+                '$match': {
+                      '$text': {
+                        '$search': search_value
+                      }
+                }
+            }, {
+                '$project': {
+                    '_id': 0,
+                    'nsc': 1,
+                    'preferred_name': 1
+                }
+            }, {
+                '$limit': 10
+            }
+        ])
+
+        # Create options list for the dropdown
+        options = [{'label': r['preferred_name'][0], 'value': r['nsc']} for r in results]
+
+        return options
+    if radio == 2:
+        results = dataService.COMPOUNDS_COLL.aggregate([
+            {
+                '$match': {
+                    'char_nsc': {'$regex': search_value }
+                }
+            }, {
+                '$project': {
+                    '_id': 0,
+                    'nsc': 1
+                }
+            }, {
+                '$limit': 10
+            }
+        ])
+
+        # Create options list for the dropdown
+        options = [{'label': r['nsc'], 'value': r['nsc']} for r in results]
+
+        return options
+
 
 @dash.callback(
     Output("co-content", "children"),
-    Input("co-nsc-dropdown", "value"),
+    Input("co-submit", "n_clicks"),
+    State("co-nsc-dropdown","value"),
     prevent_initial_call=True
 )
-def get_compound(nsc):
+def get_compound(nclicks, nsc):
     print(f'IN COMPOUNDS LINE 36')
     comp = dataService.get_comp_data(nsc)
-    comp_table = get_comp_table(comp)
+    smiles = comp['mv_dtp_disregistration_short']['canonicalsmiles']
+    mol = Chem.MolFromSmiles(smiles)
+    Draw.MolToFile(mol, './molecule.png', size=(400, 800))
+    img_path = Path('./molecule.png')
+
+    # comp_table = get_comp_table(comp)
+    # Experiment should have 'Expid' , 'Type' , 'Description'
+    df = dataService.get_all_expids_by_nsc(nsc)
+    table = dash_table.DataTable(df.to_dict('records'), id='co-table')
+
     card = dbc.Card(id='co-content-card', children=[
         dbc.CardHeader(html.H4(f'NSC {nsc} | {comp["preferred_name"][0]}')),
-        dbc.CardImg(src=comp['structure_picture']['simage']),
-        dbc.CardBody(comp_table)
+        dbc.CardImg(src=str(img_path.absolute()), top=True),
+        dbc.CardBody(table)
     ])
 
     return card
 
 
+# This builds a HTML table.  It's not quite what we want anymore.
 def get_comp_table(comp):
-    print(f'IN COMPOUNDS LINE 49')
     soldata = [(f'Vehicle: {x["vehicle_desc"]}\n' + f'Description: {x["solind_desc"]}\n') for x in comp['soldata']]
     #mat_class_data = [(
           #  f'Classification ID: {x["mat_class_id"]}\n' + f'Status: {x["mc_status_desc"]}\n' + f'Type: {comp["mc_type_desc"]}\n' + f'Code: {comp["mc_code_desc"]}\n')

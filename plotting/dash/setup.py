@@ -11,7 +11,9 @@ setup(
               'lifelines',
               'matplotlib',
               'pymongo',
-              'dotenv'],
+              'dotenv',
+              'rdkit'
+              ],
     url='',
     license='',
     author='gruenbergeraw',

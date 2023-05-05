@@ -1158,5 +1158,84 @@ class DataService():
         figures = [fig1,fig2,fig3,fig4,fig5]
         return figures
 
+    def get_all_expids_by_nsc(self, insc):
+        # Return a dataframe of expid, type, description, date
+        # All of the collections have a text index on respective, root-level nsc list.
+        # With that index, you can use the match/text/search formula in the agg pipeline.
+
+        data_dict = {'Expid':[],'Type':[], 'Description':[]}
+        nsc = str(insc)
+        # Five Dose dictionary loading
+        data = [d for d in
+            self.FIVEDOSE_COLL.aggregate([
+                    {
+                        '$match': {
+                              '$text': {
+                                '$search': nsc
+                              }
+                        }
+                    }, {
+                        '$project': {
+                            '_id': 0,
+                            'expid': 1,
+                            'description': '$testtype.long_descript'
+                        }
+                    }
+                ])
+            ]
+        for d in data:
+            data_dict['Expid'].append(d['expid'])
+            data_dict['Type'].append('Five Dose')
+            data_dict['Description'].append(d['description'])
+
+        # One Dose dictionary Loading
+        data = [d for d in
+                self.ONEDOSE_COLL.aggregate([
+                    {
+                        '$match': {
+                              '$text': {
+                                '$search': nsc
+                              }
+                        }
+                        }, {
+                        '$project': {
+                            '_id': 0,
+                            'expid': 1,
+                            'description': '$testtype.long_descript'
+                        }
+                    }
+                    ]
+                )]
+        for d in data:
+            data_dict['Expid'].append(d['expid'])
+            data_dict['Type'].append('One Dose')
+            data_dict['Description'].append(d['description'])
+
+        # Invivo dictionary Loading
+        data = [d for d in
+                self.INVIVO_COLL.aggregate([
+                    {
+                        '$match': {
+                              '$text': {
+                                '$search': nsc
+                              }
+                        }
+                    }, {
+                        '$project': {
+                            '_id': 0,
+                            'expid': 1,
+                            'description': '$assay_type.description'
+                        }
+                    }
+                ]
+                )]
+        for d in data:
+            data_dict['Expid'].append(d['expid'])
+            data_dict['Type'].append('Invivo')
+            data_dict['Description'].append(d['description'])
+
+
+        return pd.DataFrame(data_dict)
+
 
 dataService = DataService()
