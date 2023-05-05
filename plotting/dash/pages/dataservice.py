@@ -234,15 +234,12 @@ class DataService():
             }, {
                 '$project': {
                     '_id': 0,
-                    'fivedose_nsc': 1
-                }
-            }, {
-                '$unwind': {
-                    'path': '$fivedose_nsc'
+                    'fivedosensc': 1
                 }
             }
         ])
-        return [x['fivedose_nsc'] for x in nsc_list]
+        nsc_list = [d['fivedosensc'] for d in nsc_list]
+        return nsc_list[0].replace('\'', '').split(',')
 
     def get_mean_graphs_data(self, nsc, expid):
         print(f'IN GET MEAN_GRAPHS_DATA WITH {nsc} and expid {expid}')

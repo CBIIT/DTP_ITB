@@ -1,11 +1,15 @@
 import base64
+import os
+import urllib
 
 import dash
 from dash import html, dcc, Input, Output, State, dash_table
 from dash.exceptions import PreventUpdate
 from rdkit import Chem
-from rdkit.Chem import Draw
+from rdkit.Chem import Draw, AllChem, rdDistGeom, rdDepictor
 import dash_bootstrap_components as dbc
+from rdkit.Chem.Draw import rdMolDraw2D
+
 from .dataservice import dataService
 from pathlib import Path
 
@@ -23,13 +27,13 @@ left_select = dbc.Card(id='co-sel-card', body=True, children=[
         dbc.Form(id='co-input-form', children=[
             dbc.Row(children=[
                 html.Div(className='d-grid', children=[
-                    dbc.Label("Choose one"),
+                    dbc.Label("Choose one", html_for="co-radio"),
                     dbc.RadioItems(
                         options=[
                             {"label": "Preferred Name", "value": 1},
                             {"label": "NSC No.", "value": 2}
                         ], id='co-radio'),
-                    html.Br(),
+                    html.Hr(),
                     dcc.Dropdown(id="co-nsc-dropdown"),
                     html.Br(),
                     dbc.Button("Submit", id='co-submit', n_clicks=0)
@@ -99,22 +103,30 @@ def initialize(search_value, radio):
     prevent_initial_call=True
 )
 def get_compound(nclicks, nsc):
-    print(f'IN COMPOUNDS LINE 36')
+
     comp = dataService.get_comp_data(nsc)
     smiles = comp['mv_dtp_disregistration_short']['canonicalsmiles']
     mol = Chem.MolFromSmiles(smiles)
-    Draw.MolToFile(mol, './molecule.png', size=(400, 800))
-    img_path = Path('./molecule.png')
+    svg = rdMolDraw2D.MolDraw2DSVG(350, 300)
+    svg.DrawMolecule(mol)
+    svg.FinishDrawing()
+    # print(f'SVG TEXT: {svg.GetDrawingText()}')
+    data_uri = "data:image/svg+xml;charset=utf-8," + urllib.parse.quote(svg.GetDrawingText())
 
     # comp_table = get_comp_table(comp)
     # Experiment should have 'Expid' , 'Type' , 'Description'
     df = dataService.get_all_expids_by_nsc(nsc)
-    table = dash_table.DataTable(df.to_dict('records'), id='co-table')
+    table = dash_table.DataTable(
+        df.to_dict('records'),
+        id='co-table',
+        sort_by=[{'column_id': 'Expid', 'direction': 'asc'}, {'column_id':'Type', 'direction': 'asc'}],
+        sort_action="native",
+        sort_mode="multi",
+        )
 
     card = dbc.Card(id='co-content-card', children=[
         dbc.CardHeader(html.H4(f'NSC {nsc} | {comp["preferred_name"][0]}')),
-        dbc.CardImg(src=str(img_path.absolute()), top=True),
-        dbc.CardBody(table)
+        dbc.CardBody([html.Img(src=data_uri), html.Hr(), table])
     ])
 
     return card

@@ -26,9 +26,8 @@ app = Dash(
 )
 def initialize(_):
     data_dict = {}
-
-    fd_dict = load_exp_ids()
-    data_dict['fd_dict'] = fd_dict
+    # TODO:Refactor all of this to autocomplete
+    data_dict['fd_dict'] = load_exp_ids()
     print(f'Five dose exp ids loaded...')
 
     data_dict['compounds'] = load_comps()
@@ -41,7 +40,7 @@ def initialize(_):
     print(f'One Dose expIds loaded...')
 
     data_dict['nci_60_fd'] = get_fd_cells()
-    return data_dict, html.I('Modules Initialized')
+    return data_dict, ''
 
     # Functions to load data
 
@@ -55,6 +54,8 @@ def get_fd_cells():
                             '_id': 1,
                             'results': 0
                         }
+                    }, {
+                        '$limit': 25
                     }
                 ]
             ))
@@ -86,6 +87,8 @@ def load_comps():
                     '$unwind': {
                         'path': '$name'
                     }
+                },{
+                    '$limit': 25
                 }
             ]))
             ]
@@ -101,6 +104,8 @@ def load_exp_ids():
                         'fivedosensc': 1,
                         '_id': 0
                     }
+                }, {
+                    '$limit': 25
                 }
             ])
             ]
@@ -119,6 +124,8 @@ def get_invivo_expids():
                 'invivonsc': 1,
                 '_id': 0
             }
+        }, {
+            '$limit': 25
         }
     ])
     data = [d for d in data]

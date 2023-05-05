@@ -1,6 +1,7 @@
 import dash
 from dash import html, dcc, Input, Output, State, ctx
 import dash_bootstrap_components as dbc
+from dash.exceptions import PreventUpdate
 
 from .dataservice import dataService
 
@@ -19,8 +20,10 @@ left_select = dbc.Card(id='c-sel-card', body=True, children=[
                 html.Div(className='d-grid', children=[
                     dbc.Label("Select Experiment ID", html_for="expid-dropdown"),
                     dcc.Dropdown(id="expid-dropdown")
-                ])
-            ], style=ROW_PADDING),
+                ])], style=ROW_PADDING),
+            dbc.Row(dbc.Button("Get NSCs", id='c-get-nscs', n_clicks=0), style=ROW_PADDING),
+            html.Hr(),
+
             dbc.Row(children=[
                 html.Div(className='d-grid', children=[
                     dbc.Label("Select NSC Number", html_for="nsc-dropdown"),
@@ -39,23 +42,42 @@ left_select = dbc.Card(id='c-sel-card', body=True, children=[
 
 @dash.callback(
     Output("expid-dropdown", "options"),
-    Input("fivedose-nav", "id"),
-    State("app-store", "data")
+    Output("nsc-dropdown","options"),
+    Input('expid-dropdown', 'search_value')
 )
-def initialize(nav, data):
-    return [{"label": x, "value": x} for x in data['fd_dict'].keys()]
+def initialize(search_value):
+    if not search_value:
+        raise PreventUpdate
+    else:
+        results = dataService.FIVEDOSE_COLL.aggregate([
+            {
+                '$match': {
+                    'expid': {'$regex': str(search_value) }
+                }
+            }, {
+                '$project': {
+                    '_id': 0,
+                    'expid': 1
+                }
+            }, {
+                '$limit': 10
+            }
+        ])
+        options = [{'label': r['expid'], 'value': r['expid']} for r in results]
+
+        return options, []
 
 
 @dash.callback(
-    Output(component_id='nsc-dropdown', component_property='options'),
+    Output(component_id='nsc-dropdown', component_property='options', allow_duplicate=True),
     Output(component_id='nsc-dropdown', component_property='value'),
     Output(component_id='submit-button', component_property='disabled'),
-    Input(component_id='expid-dropdown', component_property='value'),
-    State("app-store", "data"),
+    Input("c-get-nscs", "n_clicks"),
+    State(component_id='expid-dropdown', component_property='value'),
     prevent_initial_call=True
 )
-def get_nscs(expid, data):
-    nscs = data['fd_dict'][expid]
+def get_nscs(n_clicks, expid):
+    nscs = dataService.get_nscs_by_expid(expid)
     if len(nscs) > 0:
         return [{"label": x, "value": x} for x in nscs], nscs[0], False
     else:
