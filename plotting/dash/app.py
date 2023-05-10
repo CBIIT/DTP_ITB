@@ -176,11 +176,12 @@ def get_od_expids():
 nav = dbc.Nav(
     [
         dbc.NavItem(dbc.NavLink("Home", active="exact", href="/", id='home-nav')),
+        dbc.NavItem(dbc.NavLink("Compounds", active="exact", href="/comps", id='comps-nav')),
         dbc.NavItem(dbc.NavLink("Invivo", active="exact", href="/invivo", id='invivo-nav')),
         dbc.NavItem(dbc.NavLink("Five Dose", active="exact", href="/fivedose", id='fivedose-nav')),
         dbc.NavItem(dbc.NavLink("One Dose", active="exact", href="/onedose", id='onedose-nav')),
-        dbc.NavItem(dbc.NavLink("By Cell", active="exact", href="/cells", id='cells-nav')),
-        dbc.NavItem(dbc.NavLink("Compounds", active="exact", href="/comps", id='comps-nav'))
+        dbc.NavItem(dbc.NavLink("By Cell", active="exact", href="/cells", id='cells-nav'))
+
     ],
     pills=True,
     navbar=True

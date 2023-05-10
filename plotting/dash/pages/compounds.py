@@ -10,12 +10,13 @@ from rdkit.Chem import Draw, AllChem, rdDistGeom, rdDepictor
 import dash_bootstrap_components as dbc
 from rdkit.Chem.Draw import rdMolDraw2D
 
+
 from .dataservice import dataService
 from pathlib import Path
 
 dash.register_page(__name__, path='/comps')
 
-#nscs = dataService.COMP_NSCS
+# nscs = dataService.COMP_NSCS
 
 ROW_PADDING = {
     "paddingTop": "calc(var(--bs-gutter-x) * .5)",
@@ -43,6 +44,7 @@ left_select = dbc.Card(id='co-sel-card', body=True, children=[
     ])
 ])
 
+
 @dash.callback(
     Output("co-nsc-dropdown", "options"),
     Input("co-nsc-dropdown", "search_value"),
@@ -55,9 +57,9 @@ def initialize(search_value, radio):
         results = dataService.COMPOUNDS_COLL.aggregate([
             {
                 '$match': {
-                      '$text': {
+                    '$text': {
                         '$search': search_value
-                      }
+                    }
                 }
             }, {
                 '$project': {
@@ -78,7 +80,7 @@ def initialize(search_value, radio):
         results = dataService.COMPOUNDS_COLL.aggregate([
             {
                 '$match': {
-                    'char_nsc': {'$regex': search_value }
+                    'char_nsc': {'$regex': search_value}
                 }
             }, {
                 '$project': {
@@ -99,11 +101,10 @@ def initialize(search_value, radio):
 @dash.callback(
     Output("co-content", "children"),
     Input("co-submit", "n_clicks"),
-    State("co-nsc-dropdown","value"),
+    State("co-nsc-dropdown", "value"),
     prevent_initial_call=True
 )
 def get_compound(nclicks, nsc):
-
     comp = dataService.get_comp_data(nsc)
     smiles = comp['mv_dtp_disregistration_short']['canonicalsmiles']
     mol = Chem.MolFromSmiles(smiles)
@@ -116,13 +117,18 @@ def get_compound(nclicks, nsc):
     # comp_table = get_comp_table(comp)
     # Experiment should have 'Expid' , 'Type' , 'Description'
     df = dataService.get_all_expids_by_nsc(nsc)
+    df['Expid'] = df.apply(lambda row: create_links(row['Expid'], row['Type']), axis=1)
+
     table = dash_table.DataTable(
         df.to_dict('records'),
+        columns=[{'id': x, 'name': x, 'presentation': 'markdown'} if x == 'Expid' else {'id': x, 'name': x} for x in
+                 df.columns],
         id='co-table',
-        sort_by=[{'column_id': 'Expid', 'direction': 'asc'}, {'column_id':'Type', 'direction': 'asc'}],
         sort_action="native",
         sort_mode="multi",
-        )
+        filter_action="native",
+        markdown_options={"html": True}
+    )
 
     card = dbc.Card(id='co-content-card', children=[
         dbc.CardHeader(html.H4(f'NSC {nsc} | {comp["preferred_name"][0]}')),
@@ -132,19 +138,30 @@ def get_compound(nclicks, nsc):
     return card
 
 
+def create_links(expid, type):
+    if type == 'One Dose':
+        # return html.A(href=expid, children=dcc.Link(expid, href=f'/onedose/{expid}/'))
+        return f'<a href="/onedose/{expid}/">{expid}</a>'
+    elif type == 'Five Dose':
+        return f'<a href="/fivedose/{expid}/">{expid}</a>'
+    elif type == 'Invivo':
+        return f'<a href="/invivo/{expid}/">{expid}</a>'
+    else:
+        raise Exception('Error making link')
+
+
 # This builds a HTML table.  It's not quite what we want anymore.
 def get_comp_table(comp):
     soldata = [(f'Vehicle: {x["vehicle_desc"]}\n' + f'Description: {x["solind_desc"]}\n') for x in comp['soldata']]
-    #mat_class_data = [(
-          #  f'Classification ID: {x["mat_class_id"]}\n' + f'Status: {x["mc_status_desc"]}\n' + f'Type: {comp["mc_type_desc"]}\n' + f'Code: {comp["mc_code_desc"]}\n')
-       # for x in comp['material_classification']]
-    #rel_nsc = [(f'NSC: {x["related_nsc"]}\n' + f'How: {x["how_related"]}\n') for x in comp['related_prefix_nsc']]
+    # mat_class_data = [(
+    #  f'Classification ID: {x["mat_class_id"]}\n' + f'Status: {x["mc_status_desc"]}\n' + f'Type: {comp["mc_type_desc"]}\n' + f'Code: {comp["mc_code_desc"]}\n')
+    # for x in comp['material_classification']]
+    # rel_nsc = [(f'NSC: {x["related_nsc"]}\n' + f'How: {x["how_related"]}\n') for x in comp['related_prefix_nsc']]
     chem_names = [(f'Name: {x["name"]}\n' + f'Type: {x["name_type"]}\n') for x in comp['cmpd_chem_name']]
     print(f'IN COMPOUNDS LINE 56')
     table_header = [
         html.Thead(html.Tr([html.Th("Data Field"), html.Th("Value")]))
     ]
-
 
     # APPARENTLY COMPOUNDS ARE MISSING A LOT OF THESE FIELDS SO YOU GET KEY ERRORS EVERYWHERE
     row1 = html.Tr([html.Td("CAS"), html.Td(f"{comp['cas']}")])
@@ -164,7 +181,7 @@ def get_comp_table(comp):
     return table
 
 
-layout = dbc.Row(children=[dbc.Col(left_select, width=2,style=ROW_PADDING),
+layout = dbc.Row(children=[dbc.Col(left_select, width=2, style=ROW_PADDING),
                            dbc.Col(dcc.Loading(id='co-content-loading', type='default',
                                                children=html.Div(
                                                    children=html.P('Please select NSC'),
