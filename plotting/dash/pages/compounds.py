@@ -117,7 +117,7 @@ def get_compound(nclicks, nsc):
     # comp_table = get_comp_table(comp)
     # Experiment should have 'Expid' , 'Type' , 'Description'
     df = dataService.get_all_expids_by_nsc(nsc)
-    df['Expid'] = df.apply(lambda row: create_links(row['Expid'], row['Type']), axis=1)
+    df['Expid'] = df.apply(lambda row: create_links(row['Expid'], row['Type'], nsc), axis=1)
 
     table = dash_table.DataTable(
         df.to_dict('records'),
@@ -138,14 +138,13 @@ def get_compound(nclicks, nsc):
     return card
 
 
-def create_links(expid, type):
+def create_links(expid, type, nsc):
     if type == 'One Dose':
-        # return html.A(href=expid, children=dcc.Link(expid, href=f'/onedose/{expid}/'))
-        return f'<a href="/onedose/{expid}/">{expid}</a>'
+        return f'<a href="/onedose/{expid}/{nsc}">{expid}</a>'
     elif type == 'Five Dose':
-        return f'<a href="/fivedose/{expid}/">{expid}</a>'
+        return f'<a href="/fivedose/{expid}/{nsc}">{expid}</a>'
     elif type == 'Invivo':
-        return f'<a href="/invivo/{expid}/">{expid}</a>'
+        return f'<a href="/invivo/{expid}/{nsc}">{expid}</a>'
     else:
         raise Exception('Error making link')
 
