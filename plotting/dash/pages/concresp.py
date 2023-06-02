@@ -13,70 +13,51 @@ ROW_PADDING = {
     "paddingBottom": "calc(var(--bs-gutter-x) * .5)"
 }
 
+
 def get_left_select(expid, nsc):
     if expid is None and nsc is None:
-        return dbc.Card(id='c-sel-card', body=True, children=[
-            html.Div(id='c-input-form-div', children=[
-                dbc.Form(id='c-input-form', children=[
-                    dbc.Row(children=[
-                        html.Div(className='d-grid', children=[
-                            dbc.Label("Select Experiment ID", html_for="expid-dropdown"),
-                            dcc.Dropdown(id="expid-dropdown")
-                        ])], style=ROW_PADDING),
-                    dbc.Row(dbc.Button("Get NSCs", id='c-get-nscs', n_clicks=0), style=ROW_PADDING),
-                    html.Hr(),
-
-                    dbc.Row(children=[
-                        html.Div(className='d-grid', children=[
-                            dbc.Label("Select NSC Number", html_for="nsc-dropdown"),
-                            dcc.Dropdown(id="nsc-dropdown")
-                        ])
-                    ], style=ROW_PADDING),
-                    dbc.Row(children=[
-                        html.Div(className='d-grid gap-2', children=[
-                            dbc.Button("Submit", id="submit-button", n_clicks=0, disabled=True)
-                        ])
-                    ])
-                ])
-            ])
-        ])
+        expid_dropdown = dcc.Dropdown(id="expid-dropdown")
+        nsc_dropdown = dcc.Dropdown(id="nsc-dropdown")
     else:
-        return dbc.Card(id='c-sel-card', body=True, children=[
-            html.Div(id='c-input-form-div', children=[
-                dbc.Form(id='c-input-form', children=[
-                    dbc.Row(children=[
-                        html.Div(className='d-grid', children=[
-                            dbc.Label("Select Experiment ID", html_for="expid-dropdown"),
-                            dcc.Dropdown(id="expid-dropdown", value=expid, options=[{'label': expid, 'value': expid}])
-                        ])], style=ROW_PADDING),
-                    dbc.Row(dbc.Button("Get NSCs", id='c-get-nscs', n_clicks=0), style=ROW_PADDING),
-                    html.Hr(),
+        expid_dropdown = dcc.Dropdown(id="expid-dropdown", value=expid, options=[{'label': expid, 'value': expid}])
+        nsc_dropdown = dcc.Dropdown(id="nsc-dropdown", value=nsc, options=[{'label': nsc, 'value': nsc}])
 
-                    dbc.Row(children=[
-                        html.Div(className='d-grid', children=[
-                            dbc.Label("Select NSC Number", html_for="nsc-dropdown"),
-                            dcc.Dropdown(id="nsc-dropdown", value=nsc, options=[{'label': nsc, 'value': nsc}])
-                        ])
-                    ], style=ROW_PADDING),
-                    dbc.Row(children=[
-                        html.Div(className='d-grid gap-2', children=[
-                            dbc.Button("Submit", id="submit-button", n_clicks=0, disabled=False)
-                        ])
+    return dbc.Card(id='c-sel-card', body=True, children=[
+        html.Div(id='c-input-form-div', children=[
+            dbc.Form(id='c-input-form', children=[
+                dbc.Row(children=[
+                    html.Div(className='d-grid', children=[
+                        dbc.Label("Select Experiment ID", html_for="expid-dropdown"),
+                        expid_dropdown
+                    ])], style=ROW_PADDING),
+                dbc.Row(dbc.Button("Get NSCs", id='c-get-nscs', n_clicks=0), style=ROW_PADDING),
+                html.Hr(),
+
+                dbc.Row(children=[
+                    html.Div(className='d-grid', children=[
+                        dbc.Label("Select NSC Number", html_for="nsc-dropdown"),
+                        nsc_dropdown
+                    ])
+                ], style=ROW_PADDING),
+                dbc.Row(children=[
+                    html.Div(className='d-grid gap-2', children=[
+                        dbc.Button("Submit", id="submit-button", n_clicks=0, disabled=True)
                     ])
                 ])
             ])
         ])
-
+    ])
 
 
 @dash.callback(
     Output("expid-dropdown", "options"),
-    Output("nsc-dropdown", "options"),
-    Input('expid-dropdown', 'search_value')
+    Input('expid-dropdown', 'search_value'),
+    State("app-store", "data"),
+    prevent_initial_call=True
 )
-def initialize(search_value):
+def initialize(search_value, data):
     if not search_value:
-        raise PreventUpdate
+        return [{"label": x, "value": x} for x in data['fd_dict'].keys()]
     else:
         results = dataService.FIVEDOSE_COLL.aggregate([
             {
@@ -94,7 +75,7 @@ def initialize(search_value):
         ])
         options = [{'label': r['expid'], 'value': r['expid']} for r in results]
 
-        return options, []
+        return options
 
 
 @dash.callback(
@@ -114,7 +95,7 @@ def get_nscs(n_clicks, expid):
 
 
 @dash.callback(
-    Output(component_id='graph-content', component_property='children'),
+    Output(component_id='graph-content', component_property='children', allow_duplicate=True),
     Input(component_id='submit-button', component_property='n_clicks'),
     Input(component_id="graph-tabs", component_property="active_tab"),
     State(component_id='nsc-dropdown', component_property='value'),
@@ -158,56 +139,60 @@ def get_graphs(conc_clicks, active_tab, nsc, expid):
     if active_tab == 'tgi':
         dataService.get_mean_graphs_data(nsc, expid)
         return dcc.Graph(figure=dataService.get_tgi_graph(nsc))
+    if active_tab == 'heatmap':
+        return dbc.Col([
+            dbc.Row([
+                dbc.Label("Choose Type"),
+                dbc.Select(
+                    id="conc-heat-type",
+                    options=[
+                        {"label": "GI50", "value": "gi50"},
+                        {"label": "LC50", "value": "lc50"},
+                        {"label": "TGI", "value": "tgi"}
+                    ])
+                ]
+            ),
+            dbc.Row(id='conc-heat-map-content')
+        ])
+
+@dash.callback(
+    Output(component_id='conc-heat-map-content', component_property='children'),
+    Input(component_id='conc-heat-type', component_property='value'),
+    State(component_id='expid-dropdown', component_property='value'),
+    prevent_initial_call=True
+)
+def load_heatmaps(heatmap_type, expid):
+    return dcc.Loading(dcc.Graph(figure=dataService.get_fivedose_heatmap(expid, heatmap_type)))
 
 
 def layout(expid=None, nsc=None):
     if expid is None or nsc is None:
-        return dbc.Row(children=[
-            dbc.Col(get_left_select(expid, nsc), width=2),
-            dbc.Col(dbc.Card([
-                dbc.CardHeader(
-                    dbc.Tabs(
-                        [
-                            dbc.Tab(tab_id='conc-resp-all', label="Conc Response"),
-                            dbc.Tab(tab_id='conc-resp', label="Conc Response (Panel)"),
-                            dbc.Tab(tab_id='gi-50', label="GI50"),
-                            dbc.Tab(tab_id='tgi', label="TGI"),
-                            dbc.Tab(tab_id='lc-50', label="LC50")
-                        ],
-                        active_tab='conc-resp-all',
-                        id='graph-tabs',
-                    )),
-                dbc.CardBody(
-                    dcc.Loading(id='graph-content-loading', type='default',
-                                children=html.Div(html.P('Please select Exp Nbr, NSC'), id='graph-content', ))
-                )
-            ]),
-                width=10
-            )
-        ], style=ROW_PADDING)
+        card_body = dcc.Loading(id='graph-content-loading', type='default',
+                                children=html.Div(html.P('Please select Exp Nbr, NSC'), id='graph-content'))
     else:
-        # Need to somehow generate all the graphs.  Not sure how this will come out.
-        return dbc.Row(children=[
-            dbc.Col(get_left_select(expid, nsc), width=2),
-            dbc.Col(dbc.Card([
-                dbc.CardHeader(
-                    dbc.Tabs(
-                        [
-                            dbc.Tab(tab_id='conc-resp-all', label="Conc Response"),
-                            dbc.Tab(tab_id='conc-resp', label="Conc Response (Panel)"),
-                            dbc.Tab(tab_id='gi-50', label="GI50"),
-                            dbc.Tab(tab_id='tgi', label="TGI"),
-                            dbc.Tab(tab_id='lc-50', label="LC50")
-                        ],
-                        active_tab='conc-resp-all',
-                        id='graph-tabs',
-                    )),
-                dbc.CardBody(
-                    dcc.Loading(id='graph-content-loading', type='default',
-                                children=html.Div(get_graphs(0, 'conc-resp-all', nsc, expid), id='graph-content' ))
-                )
-            ]),
-                width=10
-            )
-        ], style=ROW_PADDING)
+        card_body = dcc.Loading(id='graph-content-loading', type='default',
+                                children=html.Div(get_graphs(0, 'conc-resp-all', nsc, expid), id='graph-content'))
 
+    return dbc.Row(children=[
+        dbc.Col(get_left_select(expid, nsc), width=2),
+        dbc.Col(dbc.Card([
+            dbc.CardHeader(
+                dbc.Tabs(
+                    [
+                        dbc.Tab(tab_id='conc-resp-all', label="Conc Response"),
+                        dbc.Tab(tab_id='conc-resp', label="Conc Response (Panel)"),
+                        dbc.Tab(tab_id='gi-50', label="GI50"),
+                        dbc.Tab(tab_id='tgi', label="TGI"),
+                        dbc.Tab(tab_id='lc-50', label="LC50"),
+                        dbc.Tab(tab_id='heatmap', label="Exp Heatmap")
+                    ],
+                    active_tab='conc-resp-all',
+                    id='graph-tabs',
+                )),
+            dbc.CardBody(
+                card_body
+            )
+        ]),
+            width=10
+        )
+    ], style=ROW_PADDING)

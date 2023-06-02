@@ -1234,5 +1234,44 @@ class DataService():
 
         return pd.DataFrame(data_dict)
 
+    def get_fivedose_heatmap(self, expid, type):
+        df = pd.DataFrame(self.FIVEDOSE_COLL.aggregate([
+            {
+                '$match': {
+                    'expid': expid
+                }
+            }, {
+                '$project': {
+                    'nsc': '$tline.nsc',
+                    'cell_line': '$tline.cellline.cellname',
+                    'panel': '$tline.cellline.panelcde',
+                    type: f'$tline.{type}.Average',
+                    '_id': 0
+                }
+            }
+        ]).next() )
+
+        # , dtype={'nsc': 'string', 'cell_line':'string', 'panel': 'string', 'gi50': 'float64'}
+        df['nsc'] = df['nsc'].apply(lambda x: str(x))
+
+        table = pd.pivot_table(df, values=type, index=['cell_line'], columns=['nsc']).fillna(0)
+        # Thought --> Create traces PER panel group and combine on figure object.
+        fig = go.Figure(data=go.Heatmap(x=table.columns,
+                                        y=table.index,
+                                        z=table.values,
+                                        colorscale=['red', 'orange', 'yellow', 'green', 'black'],
+                                        showlegend=False
+                                        ))
+        fig.update_traces(colorbar_title_text='Concentration (log10 Molar)', selector=dict(type='heatmap'))
+        fig.update_layout(
+            title=f'Exp {expid} {type} Heatmap',
+            title_x=0.5,
+            xaxis_title='NSC',
+            yaxis_title='Cell Line',
+            height=(60 * 15)
+        )
+        fig.update_yaxes(tickmode="linear")
+
+        return fig
 
 dataService = DataService()
