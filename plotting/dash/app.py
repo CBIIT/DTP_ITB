@@ -1,11 +1,22 @@
 # Run this app with `python app.py` and
 # visit http://127.0.0.1:8050/ in your web browser.
-import json
+# app.py is the driver of the application and orchestrates the integration
+# of all the other parts of the graphing application.
+
 from dash import Dash, html, dcc, Output, Input
 import dash
 import dash_bootstrap_components as dbc
 from pages.dataservice import dataService
 
+# The variable, app, is the object containing the application.
+# use_pages means all routes in the pages folder will be scanned and added.
+# title represents the browser bar title name.
+# external_stylesheets indicates the list of css files included as well as those in the assets folder
+# meta_tags represent standard HTML head meta configuration settings
+# suppress_callback_exceptions is enabled because of how dynamic certain parts of the application are
+#           for example, portions of pages are rendered depending on conditions, some of which
+#           have event (callback) listeners attached to properties, which, at start and run time,
+#           can't be mapped in the initial phase of the application lifecycle.
 app = Dash(
     __name__,
     use_pages=True,
@@ -26,9 +37,20 @@ app = Dash(
     Input('initializer', 'style')
 )
 def initialize(_):
-    data_dict = {}
+    '''
+    This initially loads values for the dropdowns on the various pages to help simulate
+    the fact that every expid or nsc was not pre-loaded, only a certain part of it.
+    I have arbitrarily picked 25 values from each of the collections to help bootstrap it.
+    :param _:
+    :return:
+        dict: data_dict contains all values that were initialized.
+            static keys: 'fd_dict' for 5 dose, 'compounds' for compounds,
+                'invivo_dict' for invivo experiments, 'onedose_dict' for one dose expids
+                'nci_60_fd' for all the nci 60 cells and their respective expids. This is not functional
+                right now.
+    '''
+    data_dict = {'fd_dict': load_exp_ids()}
     # TODO:Refactor all of this to autocomplete
-    data_dict['fd_dict'] = load_exp_ids()
     print(f'Five dose exp ids loaded...')
 
     data_dict['compounds'] = load_comps()
@@ -47,23 +69,32 @@ def initialize(_):
 
 
 def get_fd_cells():
-    return [d['_id'] for d in
-            (dataService.CELLS_COLL.aggregate(
-                [
-                    {
-                        '$project': {
-                            '_id': 1,
-                            'results': 0
-                        }
-                    }, {
-                        '$limit': 25
-                    }
-                ]
-            ))
-            ]
+    """
+    Originally used to pivot having NCI60 cell lines as the keys for all experiments, but, under development.
+    :return: list: empty list until revisited
+    """
+    return []
+    # return [d['_id'] for d in
+    #       (dataService.CELLS_COLL.aggregate(
+    #          [
+    #              {
+    #                  '$project': {
+    #                      '_id': 1,
+    #                      'results': 0
+    #                  }
+    #             }, {
+    #                  '$limit': 25
+    #             }
+    #         ]
+    #     ))
+    #      ]
 
 
 def load_comps():
+    """
+    Gathers all compounds that have SMILES, Chem name, and a preferred name field.
+    :return: list: list of compounds that meet requirements
+    """
     return [d for d in
             (dataService.COMPOUNDS_COLL.aggregate([
                 {
@@ -88,7 +119,7 @@ def load_comps():
                     '$unwind': {
                         'path': '$name'
                     }
-                },{
+                }, {
                     '$limit': 25
                 }
             ]))
@@ -96,6 +127,10 @@ def load_comps():
 
 
 def load_exp_ids():
+    """
+    Gathers Five Dose experiment IDs. Just the first 25
+    :return: list: 25 experiment IDs to initially populate dropdowns.
+    """
     fd = {}
     data = [fd.update({d['expid']: fd_helper(d['fivedosensc'])}) for d in
             dataService.FIVEDOSE_COLL.aggregate([
@@ -114,10 +149,19 @@ def load_exp_ids():
 
 
 def fd_helper(d):
+    """
+    For documents that have nsc lists in total string format, this creates a list of those NSCs
+    :param d: string: string representation of the NSC list
+    :return: list: list of all NSCs in the experiment.
+    """
     return [int(d) for d in d.replace('\'', '').split(',')]
 
 
 def get_invivo_expids():
+    """
+    Return first 25 invivo experiments with a list of the NSCs tested as the value of each expid key.
+    :return: dict: first 25 invivo experiment ids and list of NSCs in the experiment
+    """
     data = dataService.INVIVO_COLL.aggregate([
         {
             '$project': {
@@ -155,6 +199,10 @@ def get_invivo_expids():
 
 
 def get_od_expids():
+    """
+    Returns a dictionary of one dose experiment IDs and associated NSCs in that experiment
+    :return: dict: experiment ID : list: NSCs used in experiment
+    """
     data = dataService.ONEDOSE_COLL.aggregate([
         {
             '$project': {
@@ -173,7 +221,9 @@ def get_od_expids():
     return onedose_dict
 
 
-#### NAV STUFF ###########
+# Navigation Bar with each route
+# pills is a styling technique to highlight the current, active route
+# navbar is a toggle to the rendering engine to specify that this is a navigation bar
 nav = dbc.Nav(
     [
         dbc.NavItem(dbc.NavLink("Home", active="exact", href="/", id='home-nav')),
@@ -188,8 +238,9 @@ nav = dbc.Nav(
     navbar=True
 )
 
-################################
-# ++++++++++++++++ Application Layout +++++++++++++++
+# The layout is the root of the application and its child pages. The navbar will be present at all times,
+# but the page_container_id section will represent the various pages of the application as they are
+# routed.
 app.layout = dbc.Container(
     fluid=True,
     class_name='text-center',
@@ -204,10 +255,10 @@ app.layout = dbc.Container(
         ])
     ]
 )
-# +++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
 # ********** Start The server Here **********
+# debug enables a page debug section that helps with exceptions and other errors
 if __name__ == '__main__':
     app.run_server(debug=True)
 # *******************************************

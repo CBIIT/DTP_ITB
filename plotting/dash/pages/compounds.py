@@ -1,5 +1,9 @@
-import base64
-import os
+"""
+The compounds section of the application will allow a user to find a compound and all the associated experiments that
+it has been used in. Additionally, there is functionality to draw the compound from the SMILES code that it has.
+The list of experiments contains some high-level metadata about the experiment and a link to see plots from the
+experiment.
+"""
 import urllib
 
 import dash
@@ -12,17 +16,17 @@ from rdkit.Chem.Draw import rdMolDraw2D
 
 
 from .dataservice import dataService
-from pathlib import Path
 
+# The page is associated with the main application by this manner
 dash.register_page(__name__, path='/comps')
 
-# nscs = dataService.COMP_NSCS
-
+# CSS padding for element spacing
 ROW_PADDING = {
     "paddingTop": "calc(var(--bs-gutter-x) * .5)",
     "paddingBottom": "calc(var(--bs-gutter-x) * .5)"
 }
 
+# The search and dropdown for finding a compound by NSC or preferred name
 left_select = dbc.Card(id='co-sel-card', body=True, children=[
     html.Div(id='co-input-form-div', children=[
         dbc.Form(id='co-input-form', children=[
@@ -51,8 +55,17 @@ left_select = dbc.Card(id='co-sel-card', body=True, children=[
     State("co-radio", "value")
 )
 def initialize(search_value, radio):
+    """
+    This helps with the autocomplete functionality of this section. The first 10 closest results are returned with every
+    keystroke.
+    :param search_value: string: value entered into the search dropdown input
+    :param radio: int: the value that represents whether it is searcing NSC or preferred name.
+    :return: list: the label and value key/value pair that are nearest to users search value input.
+    """
     if not search_value:
         raise PreventUpdate
+
+    # If the value is 1, it will search on preferred name's text index
     if radio == 1:
         results = dataService.COMPOUNDS_COLL.aggregate([
             {
@@ -76,6 +89,8 @@ def initialize(search_value, radio):
         options = [{'label': r['preferred_name'][0], 'value': r['nsc']} for r in results]
 
         return options
+
+    # If the value is 2 it will search on the NSC's char_nsc field with regex
     if radio == 2:
         results = dataService.COMPOUNDS_COLL.aggregate([
             {
@@ -105,20 +120,37 @@ def initialize(search_value, radio):
     prevent_initial_call=True
 )
 def get_compound(nclicks, nsc):
+    """
+    Once the compound has been retrieved, the function renders a SMILES image, metadata, and a list of all the various
+    experiments in which it was used.
+    :param nclicks: value used to bind the submit button event
+    :param nsc: the compound's NSC number
+    :return: dbc.Card: wrapper containing a title, SMILES image, searchable table with experiments listed.
+    """
     comp = dataService.get_comp_data(nsc)
+
+    # The SMILES 2d image is generated with rdkit, and provides the textual encoding of the image, which the browser
+    # can render.
     smiles = comp['mv_dtp_disregistration_short']['canonicalsmiles']
     mol = Chem.MolFromSmiles(smiles)
     svg = rdMolDraw2D.MolDraw2DSVG(350, 300)
     svg.DrawMolecule(mol)
     svg.FinishDrawing()
-    # print(f'SVG TEXT: {svg.GetDrawingText()}')
     data_uri = "data:image/svg+xml;charset=utf-8," + urllib.parse.quote(svg.GetDrawingText())
 
-    # comp_table = get_comp_table(comp)
+
     # Experiment should have 'Expid' , 'Type' , 'Description'
     df = dataService.get_all_expids_by_nsc(nsc)
     df['Expid'] = df.apply(lambda row: create_links(row['Expid'], row['Type'], nsc), axis=1)
 
+    # Dash data table is a component that accepts a dataframe broken into a dictionary in the records style format.
+    # From there it can create all the columnar data
+    # columns is a list of the column names in the table
+    # id is a standard way to set a unique identifier for the parent table element
+    # sort_action enables the native mode for sorting by column values
+    # sort_mode is set to multi in order to allow sorting along multiple column values
+    # filter action is set to allow the native algorithm of filtering to be enabled
+    # markdown_options is set to allow for html-styled strings be rendered
     table = dash_table.DataTable(
         df.to_dict('records'),
         columns=[{'id': x, 'name': x, 'presentation': 'markdown'} if x == 'Expid' else {'id': x, 'name': x} for x in
@@ -130,6 +162,7 @@ def get_compound(nclicks, nsc):
         markdown_options={"html": True}
     )
 
+    # The card represents the parent container of the body section, and contains the data related to the compound
     card = dbc.Card(id='co-content-card', children=[
         dbc.CardHeader(html.H4(f'NSC {nsc} | {comp["preferred_name"][0]}')),
         dbc.CardBody([html.Img(src=data_uri), html.Hr(), table])
@@ -150,6 +183,7 @@ def create_links(expid, type, nsc):
 
 
 # This builds a HTML table.  It's not quite what we want anymore.
+# This is a much less dynamic table example that I have decided to ignore for various reasons.
 def get_comp_table(comp):
     soldata = [(f'Vehicle: {x["vehicle_desc"]}\n' + f'Description: {x["solind_desc"]}\n') for x in comp['soldata']]
     # mat_class_data = [(
@@ -179,7 +213,8 @@ def get_comp_table(comp):
     table = dbc.Table(table_header + table_body, bordered=True)
     return table
 
-
+# The layout variable represents the root container for the compounds page in which
+# all the components are contained.
 layout = dbc.Row(children=[dbc.Col(left_select, width=2, style=ROW_PADDING),
                            dbc.Col(dcc.Loading(id='co-content-loading', type='default',
                                                children=html.Div(

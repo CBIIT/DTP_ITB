@@ -1,3 +1,8 @@
+"""
+The DataService module was originally designed to be a singleton service to handle all database pooling connections
+along with handling business logic, so that the main content pages This is an ever-growing module that might be
+divided or not.
+"""
 import os
 import random
 
@@ -15,8 +20,15 @@ from plotly.validators.scatter.marker import SymbolValidator
 
 
 class DataService():
+    """
+    The DataService handles all initialization of data connections and business logic processing.
+    """
     initialized = False
     def __init__(self):
+        """
+        This function initializes the connections and pre-loads the experiment IDs for dcc.Store. Additionally,
+        it loads the styles from plot_styles.csv which define the COMPARE style-standards.
+        """
         load_dotenv()
         self.subscr10 = u'\u2081\u2080'
         CONN_STRING = os.getenv('CONN_STRING')
@@ -41,7 +53,7 @@ class DataService():
         self.PLOT_STYLE_DF = pd.read_csv(
             os.path.abspath('../dash/assets/plot_styles.csv'))  # /dash/assets/    /dash/pages/
 
-
+        # Creates a specific set of colors that contrast well against a light background
         colors = []
         for name, hex in mcolors.CSS4_COLORS.items():
             rgb = mcolors.hex2color(hex)
@@ -49,20 +61,30 @@ class DataService():
             if ihls[2] <= 0.75 and ihls[1] <= 0.65:
                 colors.append(name)
 
+        # The colors list is shuffled along with the symbols to create a feeling of random
+        # styles for other, non-standardized plotting styles.
         random.shuffle(colors)
         self.COLORS = colors
         symbols = SymbolValidator().values
         random.shuffle(symbols)
         self.SYMBOLS = symbols
 
-        # Load unique
-
     def __del__(self):
+        """
+        Tries to close all open database connections in the event of application exit.
+        :return: noting?
+        """
         #self.engine.dispose(close=True)
         self.CLIENT.close()
         print('Closing connections and destructing.')
 
     def get_df_by_nsc(self, nsc, exp_id):
+        """
+        MongoDB aggregation query to retrieve data for an NSC from a specific experiment.
+        :param nsc: string: NSC within experiment
+        :param exp_id: string: experiment ID
+        :return: DataFrame: dataFrame of the experiment data for the given NSC
+        """
         data = [d for d in
                 (self.FIVEDOSE_COLL.aggregate(
                     [
@@ -96,6 +118,12 @@ class DataService():
         return df
 
     def get_od_df_by_nsc(self, nsc, expid):
+        """
+        Get onedose data from experiment by NSC and experiment ID
+        :param nsc: string: NSC for which we want data from within the experiment
+        :param expid: string: experiment ID for which we are looking for result data
+        :return: DataFrame: dataFrame of the onedose experiment data
+        """
         data = [d for d in
                 (self.ONEDOSE_COLL.aggregate(
                     [
@@ -138,6 +166,11 @@ class DataService():
         return df
 
     def create_grouped_data_dict(self, df):
+        """
+        Create a dictionary of values divided up into the cell line panels as the keys.
+        :param df: DataFrame: dataFrame of experiment data
+        :return: dict: dictionary of data by cell line panel code
+        """
         data_dict = dict()
         for row in range(df.index.size):
             panelcde = df.iloc[row].cellline['panelcde']
@@ -158,6 +191,11 @@ class DataService():
         return data_dict
 
     def create_conc_resp_df(self, df):
+        """
+        Create a dataframe that pivots data based on concentration and subsequent growth percentage values
+        :param df: DataFrame: dataframe of response data in five dose.
+        :return: DataFrame: dataframe using concentrations as the index value, cell line as columns, and growth values
+        """
         new_df = None
         for row in range(df.index.size):
             cellline = df.iloc[row].cellline['cellname']
@@ -176,6 +214,12 @@ class DataService():
         return new_df
 
     def get_conc_resp_graph(self, df, nsc):
+        """
+        Entry point to generate a concentration response plot from a dataframe from a fivedose experiment.
+        :param df: DataFrame: dataframe of experiment data
+        :param nsc: string: NSC in the experiment
+        :return: Figure: returns a plotly figure object containing the plot
+        """
         conc_resp_fig = go.Figure()
         nsc_df = self.create_conc_resp_df(df)
         for cell in nsc_df.columns:
@@ -201,7 +245,13 @@ class DataService():
         return conc_resp_fig
 
     def get_conc_resp_graph_by_panel(self, nsc_df, nsc, panel):
-        # print(f'IN GET_CONC_RESP_GRAPH_BY_PANEL | nsc:{nsc}, panel:{panel}')
+        """
+        Create a conc response graph when doing so for only a specific cell line panel.
+        :param nsc_df: DataFrame: the panel-specific dataframe of experiment result data
+        :param nsc: string: NSC from the experiment
+        :param panel: string: cell line panel
+        :return: Figure: the plotly Figure object containing the response curve
+        """
         conc_resp_fig = go.Figure()
 
         for cell in nsc_df.columns:
@@ -226,6 +276,11 @@ class DataService():
         return conc_resp_fig
 
     def get_nscs_by_expid(self, expid):
+        """
+        Create a list of NSCs based on the experiment ID in Fivedose collection.
+        :param expid: string: fivedose experiment ID
+        :return: list: list of NSCs in the fivedose experiment
+        """
         nsc_list = self.FIVEDOSE_COLL.aggregate([
             {
                 '$match': {
@@ -238,10 +293,20 @@ class DataService():
                 }
             }
         ])
+        # This will be a list of one item since it's a string of the NSCs and not an array
         nsc_list = [d['fivedosensc'] for d in nsc_list]
+
+        # This takes the first (and only) item in the list and creates a list with comma delimited values
         return nsc_list[0].replace('\'', '').split(',')
 
     def get_mean_graphs_data(self, nsc, expid):
+        """
+        Initializes the instance data for the graphs of fivedose TGI, GI50, and LC50. Sets them as instance variables
+        in order to prevent additional database calls. It's not really necessary, but it is just for speed improvement.
+        :param nsc: string: the NSC of the experiment
+        :param expid: string: the experiment ID
+        :return:None: simply a helping function to optimize some performance
+        """
         print(f'IN GET MEAN_GRAPHS_DATA WITH {nsc} and expid {expid}')
         data = self.FIVEDOSE_COLL.aggregate([
             {
@@ -279,6 +344,7 @@ class DataService():
         tgi = df[['cellname', 'panel', 'tgi']]
 
         # Add the delta [to the mean] columns
+        # TODO: this delta value is incorrect and needs to be recalculated based on internal DTP 'delta' formula
         gi50_mean = gi50['gi50'].mean()
         gi50['delta'] = gi50['gi50'].copy().apply(lambda x: x - gi50_mean)
         lc50_mean = lc50['lc50'].mean()
@@ -294,6 +360,11 @@ class DataService():
         print(f"Data loaded for GI50,LC50,TGI for nsc {nsc}")
 
     def get_tgi_graph(self, nsc):
+        """
+        Creates the TGI graph for fivedose data.
+        :param nsc: string: NSC used for the experiment
+        :return: Figure: the TGI plot for fivedose experiment
+        """
         xr = (self.TGI_DF['delta'].abs().max()) * 1.10
         bar1 = px.bar(self.TGI_DF,
                       x="delta",
@@ -313,6 +384,11 @@ class DataService():
         return bar1
 
     def get_gi50_graph(self, nsc):
+        """
+        Creates the GI50 graph for fivedose data.
+        :param nsc: string: NSC used for the experiment
+        :return: Figure: the GI50 plot for fivedose experiment
+        """
         xr = (self.GI50_DF['delta'].abs().max()) * 1.10
         bar1 = px.bar(self.GI50_DF,
                       x="delta",
@@ -332,6 +408,11 @@ class DataService():
         return bar1
 
     def get_lc50_graph(self, nsc):
+        """
+        Creates the LC50 graph for fivedose data.
+        :param nsc: string: NSC used for the experiment
+        :return: Figure: the LC50 plot for fivedose experiment
+        """
         xr = (self.LC50_DF['delta'].abs().max()) * 1.10
         bar1 = px.bar(self.LC50_DF,
                       x="delta",
@@ -350,6 +431,13 @@ class DataService():
         return bar1
 
     def get_od_growth_graphs(self, df, expid, nsc):
+        """
+        Create the Onedose growth graphs for the given experiment and NSC.
+        :param df: DataFrame: onedose dataframe of experiment data specific to NSC
+        :param expid: string: the experiment ID
+        :param nsc: string: an NSC within the experiment
+        :return: list: list of two Figures, the first is growth percentage and the second is the mean graph
+        """
         ddf = df.copy()
 
         # Mean Growth Graph
@@ -389,9 +477,12 @@ class DataService():
 
         return [growth_graph, mean_graph]
 
-    # Helper function for KM Graph, to get decimal values
-    # Utility Function
     def make_survivals(self, kmdf):
+        """
+        Helper function for KM Graph, to get decimal values
+        :param kmdf: Lifelines.KMF: Kaplan-Meier object based on survival data
+        :return: list: list of the survival rates in decimal form ie 0.7, 0.6, 0.5, etc
+        """
         survival_list = list()
         n = kmdf['at_risk'].iloc()[0]
         for i, x in enumerate(kmdf['at_risk']):
@@ -400,6 +491,13 @@ class DataService():
         return survival_list
 
     def get_km_graph(self, expid, nsc, group):
+        """
+        Creates the Kaplan-Meier Survival plot.
+        :param expid: string: experiment ID of the invivo experiment
+        :param nsc: string: NSC data within the experiment
+        :param group: string: group number within the experiment
+        :return: Figure: plotly figure representing the KM survival line
+        """
         grp = int(group)
         pipeline = [
             {
@@ -501,6 +599,11 @@ class DataService():
         return fig
 
     def get_km_control(self, df):
+        """
+        Creates the Plotly trace of the control group survival rates.
+        :param df: DataFrame: dataframe of the experiment
+        :return: Graph_Object: plotly scatter graph object of the survival line.
+        """
         key = 0
         if df.size == 0:
             raise Exception('No control found in experiment')

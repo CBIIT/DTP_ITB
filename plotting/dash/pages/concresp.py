@@ -1,3 +1,6 @@
+"""
+The Five Dose experiment data contains dose response curves, TGI, GI50, LCI, and heatmaps of the data.
+"""
 import dash
 from dash import html, dcc, Input, Output, State, ctx
 import dash_bootstrap_components as dbc
@@ -5,8 +8,9 @@ from dash.exceptions import PreventUpdate
 
 from .dataservice import dataService
 
+# Registered and provides functionality for handling routing with experiment and NSC variables
 dash.register_page(__name__, path='/fivedose', path_template='/fivedose/<expid>/<nsc>')
-# expids = dataService.EXPIDS
+
 
 ROW_PADDING = {
     "paddingTop": "calc(var(--bs-gutter-x) * .5)",
@@ -15,6 +19,16 @@ ROW_PADDING = {
 
 
 def get_left_select(expid, nsc):
+    """
+    Creates the rendering of the drop down menus on the left side of the screen.
+    :param expid: selected experiment ID
+    :param nsc: selected NSC within the selected experiment
+    :return: dbc.Card: a dash bootstrap component Card that contains dropdowns of label:value lists, and
+            various buttons.
+    """
+
+    # This initial check is to handle the case when arriving at the page by way of a link on the compounds table.
+    # It will render the selected experiment and NSC in the dropdown menus.
     if expid is None and nsc is None:
         expid_dropdown = dcc.Dropdown(id="expid-dropdown")
         nsc_dropdown = dcc.Dropdown(id="nsc-dropdown")
@@ -22,6 +36,9 @@ def get_left_select(expid, nsc):
         expid_dropdown = dcc.Dropdown(id="expid-dropdown", value=expid, options=[{'label': expid, 'value': expid}])
         nsc_dropdown = dcc.Dropdown(id="nsc-dropdown", value=nsc, options=[{'label': nsc, 'value': nsc}])
 
+    # The Card object is assembled here by wrapping various components into a form.
+    # There are Dropdowns for Experiment ID, NSC, and a button to retrieve NSCs and to submit the full expid/nsc
+    # for full details.
     return dbc.Card(id='c-sel-card', body=True, children=[
         html.Div(id='c-input-form-div', children=[
             dbc.Form(id='c-input-form', children=[
@@ -56,6 +73,13 @@ def get_left_select(expid, nsc):
     prevent_initial_call=True
 )
 def initialize(search_value, data):
+    """
+    The initial dropdown values are populated if no input has been made in the experiment ID input. From there, the
+    dropdown options are re-evaluated based on partial inputs that are similar to the input.
+    :param search_value: string: the searched experiment ID
+    :param data: dcc.Store: application wide Store object that has a set of prepared experiment IDs
+    :return: list[dict]: returns a list of options that represent experiment IDs in the label: value format
+    """
     if not search_value:
         return [{"label": x, "value": x} for x in data['fd_dict'].keys()]
     else:
@@ -87,6 +111,13 @@ def initialize(search_value, data):
     prevent_initial_call=True
 )
 def get_nscs(n_clicks, expid):
+    """
+    Returns a list of NSCs that are associated with the selected experiment ID
+    :param n_clicks: the hook used to listen for button clicks
+    :param expid: string: the experiment ID from which the list of NSCs will be derived
+    :return: list, string, boolean: list of NSCs associated with the experiment, the first NSC in the list, T/F for
+                                    enabling the submit button if all is valid.
+    """
     nscs = dataService.get_nscs_by_expid(expid)
     if len(nscs) > 0:
         return [{"label": x, "value": x} for x in nscs], nscs[0], False
@@ -103,13 +134,28 @@ def get_nscs(n_clicks, expid):
     prevent_initial_call=True
 )
 def get_graphs(conc_clicks, active_tab, nsc, expid):
+    """
+    Creates and prepares graphs for rendering based on the active tab and selected values.
+    :param conc_clicks: hook used to watch for button click events
+    :param active_tab: string: the tab that is currently selected
+    :param nsc: int: the NSC selected on the left select
+    :param expid: string: the currently selected experiment ID
+    :return: dbc.Col or dcc.Component type: returns a wrapped object with plots
+    """
+    # This is used to handle form validation
     if (nsc is None) or (not ctx.triggered):
         return html.P('Please select Exp Nbr, NSC, and Group')
+
+    # Retrieve fivedose results based on nsc and experiment ID, and create a dataFrame
     df = dataService.get_df_by_nsc(nsc, expid)
 
+    # The active tab is checked and drives the return value.
+    # Graphs are made based on the state of user selections
     if active_tab == 'conc-resp-all':
+        # This is the combined dose response curve of all panels
         return dcc.Graph(figure=dataService.get_conc_resp_graph(df, nsc), style={'height': '700px'})
     if active_tab == 'conc-resp':
+        # This retrieves the dose responses grouped by panel
         data_dict = dataService.create_grouped_data_dict(df)
         panel_graphs = []
         for panel in data_dict.keys():
@@ -129,6 +175,7 @@ def get_graphs(conc_clicks, active_tab, nsc, expid):
                 rows[0].children.append(dbc.Col(id=f'graphs-{idx}', children=[graph], width=4))
         return rows  # Conc_resp_graphs, Graph Container=False, meanGraphContainer=True
 
+    # Creates similar, supplier report-looking plots based on active tab
     if active_tab == 'gi-50':
         print(f'IN GI-50: {active_tab}')
         dataService.get_mean_graphs_data(nsc, expid)
@@ -139,6 +186,7 @@ def get_graphs(conc_clicks, active_tab, nsc, expid):
     if active_tab == 'tgi':
         dataService.get_mean_graphs_data(nsc, expid)
         return dcc.Graph(figure=dataService.get_tgi_graph(nsc))
+    # This creates a Heatmaps section with a Select for the 3 types of heatmap metrics
     if active_tab == 'heatmap':
         return dbc.Col([
             dbc.Row([
@@ -162,10 +210,22 @@ def get_graphs(conc_clicks, active_tab, nsc, expid):
     prevent_initial_call=True
 )
 def load_heatmaps(heatmap_type, expid):
+    """
+    Generates heatmap through data services based on the input value of the dropdown Selection.
+    :param heatmap_type: string: the metric of data to generate the heatmap
+    :param expid: string: the experiment id
+    :return: dcc.Component: wraps a loading component around a dcc.Graph that contains the heatmap figure
+    """
     return dcc.Loading(dcc.Graph(figure=dataService.get_fivedose_heatmap(expid, heatmap_type)))
 
 
 def layout(expid=None, nsc=None):
+    """
+    Returns the layout of the menu and plots section for the five dose data. Can handle routes from links also.
+    :param expid: string: experiment ID derived from link on compounds table
+    :param nsc: string: NSC derived from link on compounds table
+    :return: dcc.Component: returns a wrapped object representing all the five dose plots section
+    """
     if expid is None or nsc is None:
         card_body = dcc.Loading(id='graph-content-loading', type='default',
                                 children=html.Div(html.P('Please select Exp Nbr, NSC'), id='graph-content'))
