@@ -644,6 +644,13 @@ class DataService():
             return control_trace
 
     def get_anml_weight_graphs(self, expid, nsc, group):
+        """
+        Creates the plots for the animal net weight and tumor weight in invivo experiments per group.
+        :param expid: string: the experiment ID
+        :param nsc: string: the NSC within the experiment
+        :param group: int: the group number within the experiment
+        :return: dict: key for each plotly figure.
+        """
         grp = int(group)
         pipeline = [
             {
@@ -745,6 +752,15 @@ class DataService():
         return fig
 
     def get_animal_weight_figure(self, anml_data_dict, cell_line, panel_code, nsc, expid):
+        """
+        Creates the actual plotly figure that contains the graph.
+        :param anml_data_dict: dict: data structure that contains animal data within the group
+        :param cell_line: string: the cell line being examined.
+        :param panel_code: string: the panel to which the cell belongs
+        :param nsc: string: the NSC used in this part of the experiment
+        :param expid: string: the experiment ID for the invivo experiment
+        :return: Figure: a plotly figure for the animal group
+        """
 
         fig = go.Figure()
 
@@ -766,6 +782,15 @@ class DataService():
         return fig
 
     def get_invivo_title(self, cell_line, panel_code, nsc, expid, type):
+        """
+        Helper function to create the title of the plot
+        :param cell_line: string: cell line being tested
+        :param panel_code: string: panel to which the cell line belongs
+        :param nsc: string: the NSC being tested
+        :param expid: string: the experiment ID
+        :param type: sttring: the type of experiment
+        :return: string: descriptive title string for a plot
+        """
         nsc_title = f'NSC {str(nsc)}'
         if str(nsc) == '999999':
             nsc_title = 'Control'
@@ -775,6 +800,12 @@ class DataService():
         return fig_title
 
     def get_median_trace(self, anml_data_dict, wt_key):
+        """
+        Create a trace for a plotly figure to represent the median value
+        :param anml_data_dict: dict: dict that contains animal data within the group
+        :param wt_key: string: the key for which data set to examine, net weight or tumor.
+        :return: Figure: scatter plot representing the median weight
+        """
         median_dict = dict()
         for x in anml_data_dict.keys():
             animal = anml_data_dict[x]
@@ -802,6 +833,12 @@ class DataService():
         return fig
 
     def get_invivo_group_numbers(self, nsc, expid):
+        """
+        Retrieve the group numbers within the experiment
+        :param nsc: string: NSC to be examined within the experiment
+        :param expid: string: experiment ID of the invivo experiment
+        :return: list(range): list of the animal group numbers of the experiment
+        """
         pipeline = [
             {
                 '$match': {
@@ -844,6 +881,13 @@ class DataService():
         return range(0, res[0]['count'])
 
     def get_invivo_box_plots(self, expid, nsc, group):
+        """
+        Entry point to create the box plots for the invivo experiment for net weight and tumor weight.
+        :param expid: string: the invivo experiment ID
+        :param nsc: nsc: the NSC being examined within the experiment
+        :param group: string: the specific group number within the experiment
+        :return: dict: a dictionary with keys: weight and tumor that each have a plotly box plot Figure as the value
+        """
         pipeline = [
             {
                 '$match': {
@@ -945,6 +989,11 @@ class DataService():
         return {'tumor': tumor_box, 'weight': box}
 
     def get_comp_data(self, nsc):
+        """
+        Return all compound collection fields given a specific NSC
+        :param nsc: string: NSC for which we want to retrieve compound data
+        :return: dict: document representing the compound with all the fields as keys, and values per the data model
+        """
         print(f'IN dataservice LINE 964')
         comp = self.COMPOUNDS_COLL.aggregate([
                             {
@@ -956,6 +1005,13 @@ class DataService():
         return comp.next()
 
     def get_invivo_summary_plots(self,expid):
+        """
+        Generate the plots and table data for an invivo experiment summary, similar to supplier
+        reports format.
+        :param expid: string: the experiment ID of the invivo experiment
+        :return: dict: contains a dictionary with keys: 'expid', 'net_wt_fig', 'tum_wt_fig', 'tum_wt', 'implant_dt',
+            'staging_dt', and 'descriptions'; these are all used within the presentation of the data.
+        """
         data = self.INVIVO_COLL.aggregate([
                 {
                     '$match': {
@@ -1184,6 +1240,11 @@ class DataService():
         return {'expid':data[0]['expid'],'net_wt_fig': net_wt, 'tum_wt_fig': tum_wt, 'implant_dt': implant_dt,'staging_dt': staging_dt, 'descriptions': descriptions}
 
     def get_cell_graphs(self, cell):
+        """
+        Experimental function to see if we could aggregate data of cell lines across all experiments.
+        :param cell: string: the cell line to examine
+        :return: list: list of figures for each of five dose experiment data per experiment.
+        """
         data = [ d for d in
                     self.CELLS_COLL.aggregate(
                     [
@@ -1259,9 +1320,13 @@ class DataService():
         return figures
 
     def get_all_expids_by_nsc(self, insc):
-        # Return a dataframe of expid, type, description, date
-        # All of the collections have a text index on respective, root-level nsc list.
-        # With that index, you can use the match/text/search formula in the agg pipeline.
+        """
+        Return a dataframe of expid, type, description, date.
+        All the collections have a text index on respective, root-level nsc list.
+        With that index, you can use the match/text/search formula in the agg pipeline.
+        :param insc: string: NSC reprsenting an index value
+        :return: DataFrame: with columns of expid, type, description, and date for a given NSC across all experiments.
+        """
 
         data_dict = {'Expid':[],'Type':[], 'Description':[]}
         nsc = str(insc)
@@ -1338,6 +1403,12 @@ class DataService():
         return pd.DataFrame(data_dict)
 
     def get_fivedose_heatmap(self, expid, type):
+        """
+        Create a heatmap of a five dose experiment given an experiment ID for GI50, TGI, and LC50
+        :param expid: string: the experiment ID of a five dose experiment
+        :param type: string: which metric to use for dataset; the GI50, LC50, or TGI
+        :return: Figure: plotly Heatmap for the experiment based on metric of GI50, LC50, or TGI across all NSCs
+        """
         df = pd.DataFrame(self.FIVEDOSE_COLL.aggregate([
             {
                 '$match': {
@@ -1377,4 +1448,7 @@ class DataService():
 
         return fig
 
+# This line ensures it is modular and semi-singleton. I say semi-singelton because I know that, for some reason,
+# Dash initializes two modules of DataService. I would have to do something hacky to ensure there is only one within
+# the given python process.
 dataService = DataService()
