@@ -146,11 +146,11 @@ class DataService():
                         }
                     }, {
                         '$match': {
-                            'Nsc': int(nsc)
+                            'nsc': int(nsc)
                         }
                     }, {
                         '$project': {
-                            'nsc': '$Nsc',
+                            'nsc': 1,
                             'panel_name': '$cellpnl.panelnme',
                             'cell_name': '$cellline.cellname',
                             'panel_code': '$cellline.panelcde',
@@ -448,11 +448,11 @@ class DataService():
             ddf,
             x='delta',
             y='cell_name',
-            labels={"delta": f"Average Growth % Delta from the Mean", "cell_name": "Cell Line"},
+            labels={"delta": f"Average Growth % Delta from the Mean", "cell_name": "Cell Line", "panel_name": "Panel"},
             barmode='relative', color='panel_name',
             orientation='h',
             title=f"Average Growth Mean Delta | NSC {nsc}",
-            height=750,
+            height=700,
             range_x=[xr, -xr]
         )
         mean_graph.update_traces(width=1)
@@ -464,11 +464,11 @@ class DataService():
             ddf,
             x='delta',
             y='cell_name',
-            labels={"delta": f"Average Growth Percentage", "cell_name": "Cell Line"},
+            labels={"delta": f"Average Growth Percentage", "cell_name": "Cell Line", "panel_name": "Panel"},
             barmode='relative', color='panel_name',
             orientation='h',
             title=f"Average Growth | NSC {nsc}",
-            height=750,
+            height=700,
             range_x=[-xr, xr]
         )
         growth_graph.update_traces(width=1)

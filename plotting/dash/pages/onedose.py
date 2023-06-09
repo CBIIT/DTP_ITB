@@ -32,7 +32,7 @@ def get_left_select(nsc, expid):
         nsc_dropdown = dcc.Dropdown(id="od-nsc-dropdown")
     else:
         expid_dropdown = dcc.Dropdown(id="od-expid-dropdown", value=expid,
-                                         options=[{'label': expid, 'value': expid}])
+                                      options=[{'label': expid, 'value': expid}])
         nsc_dropdown = dcc.Dropdown(id="od-nsc-dropdown", value=nsc, options=[{'label': nsc, 'value': nsc}])
 
     return dbc.Card(id='c-sel-card', body=True, children=[
@@ -142,12 +142,21 @@ def layout(nsc=None, expid=None):
     :param expid: If routed through the compounds list link, this is the Experiment ID from there
     :return: dbc.Row: the dash bootstrap components Row container that has all the components of the page.
     """
-    tab = None
     if nsc is None and expid is None:
-        tab = dbc.Tab(tab_id='od-conc-resp-all', label="Average Growth")
+        body = dbc.CardBody(dcc.Loading(id='od-graph-content-loading', type='default',
+                                        children=html.Div(html.P('Please select Exp Nbr, NSC'),
+                                                          id='od-graph-content', )))
     else:
-        tab = dbc.Tab(tab_id='od-conc-resp-all', label="Average Growth",
-                      children=get_graphs(0, 'od-conc-resp-all', nsc, expid))
+        body = dbc.CardBody(
+                    dcc.Loading(
+                        id='od-graph-content-loading',
+                        type='default',
+                        children=html.Div(
+                                id='od-graph-content',
+                                children=get_graphs(0, 'od-conc-resp-all', nsc, expid)
+                            )
+                        )
+                    )
 
     return dbc.Row(children=[
         dbc.Col(get_left_select(nsc, expid), width=2),
@@ -155,7 +164,7 @@ def layout(nsc=None, expid=None):
             dbc.CardHeader(
                 dbc.Tabs(
                     [
-                        tab,
+                        dbc.Tab(tab_id='od-conc-resp-all', label="Average Growth"),
                         dbc.Tab(tab_id='od-mean-growth', label="Average Mean Growth"),
                     ],
                     active_tab='od-conc-resp-all',

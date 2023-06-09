@@ -39,7 +39,7 @@ left_select = dbc.Card(id='co-sel-card', body=True, children=[
                             {"label": "NSC No.", "value": 2}
                         ], id='co-radio'),
                     html.Hr(),
-                    dcc.Dropdown(id="co-nsc-dropdown"),
+                    dcc.Dropdown(id="co-nsc-dropdown", disabled=True),
                     html.Br(),
                     dbc.Button("Submit", id='co-submit', n_clicks=0)
                 ])
@@ -48,7 +48,15 @@ left_select = dbc.Card(id='co-sel-card', body=True, children=[
     ])
 ])
 
-
+@dash.callback(
+    Output("co-nsc-dropdown", "disabled"),
+    Input("co-radio", "value")
+)
+def enable_dropdown(radio):
+    if radio == 1 or radio == 2:
+        return False
+    else:
+        return True
 @dash.callback(
     Output("co-nsc-dropdown", "options"),
     Input("co-nsc-dropdown", "search_value"),
@@ -72,6 +80,9 @@ def initialize(search_value, radio):
                 '$match': {
                     '$text': {
                         '$search': search_value
+                    },
+                    'mv_dtp_disregistration_short.canonicalsmiles': {
+                        '$exists': True
                     }
                 }
             }, {
@@ -95,7 +106,10 @@ def initialize(search_value, radio):
         results = dataService.COMPOUNDS_COLL.aggregate([
             {
                 '$match': {
-                    'char_nsc': {'$regex': search_value}
+                    'char_nsc': {'$regex': search_value},
+                    'mv_dtp_disregistration_short.canonicalsmiles': {
+                        '$exists': True
+                    }
                 }
             }, {
                 '$project': {
@@ -141,32 +155,38 @@ def get_compound(nclicks, nsc):
 
     # Experiment should have 'Expid' , 'Type' , 'Description'
     df = dataService.get_all_expids_by_nsc(nsc)
-    df['Expid'] = df.apply(lambda row: create_links(row['Expid'], row['Type'], nsc), axis=1)
+    if df.empty:
+        card = dbc.Card(id='co-content-card', children=[
+            dbc.CardHeader(html.H4(f'NSC {nsc} | {comp["preferred_name"][0]}')),
+            dbc.CardBody([html.Img(src=data_uri), html.Hr(), html.P('NSC not found in any experiments.')])
+        ])
+    else:
+        df['Expid'] = df.apply(lambda row: create_links(row['Expid'], row['Type'], nsc), axis=1)
 
-    # Dash data table is a component that accepts a dataframe broken into a dictionary in the records style format.
-    # From there it can create all the columnar data
-    # columns is a list of the column names in the table
-    # id is a standard way to set a unique identifier for the parent table element
-    # sort_action enables the native mode for sorting by column values
-    # sort_mode is set to multi in order to allow sorting along multiple column values
-    # filter action is set to allow the native algorithm of filtering to be enabled
-    # markdown_options is set to allow for html-styled strings be rendered
-    table = dash_table.DataTable(
-        df.to_dict('records'),
-        columns=[{'id': x, 'name': x, 'presentation': 'markdown'} if x == 'Expid' else {'id': x, 'name': x} for x in
-                 df.columns],
-        id='co-table',
-        sort_action="native",
-        sort_mode="multi",
-        filter_action="native",
-        markdown_options={"html": True}
-    )
+        # Dash data table is a component that accepts a dataframe broken into a dictionary in the records style format.
+        # From there it can create all the columnar data
+        # columns is a list of the column names in the table
+        # id is a standard way to set a unique identifier for the parent table element
+        # sort_action enables the native mode for sorting by column values
+        # sort_mode is set to multi in order to allow sorting along multiple column values
+        # filter action is set to allow the native algorithm of filtering to be enabled
+        # markdown_options is set to allow for html-styled strings be rendered
+        table = dash_table.DataTable(
+            df.to_dict('records'),
+            columns=[{'id': x, 'name': x, 'presentation': 'markdown'} if x == 'Expid' else {'id': x, 'name': x} for x in
+                     df.columns],
+            id='co-table',
+            sort_action="native",
+            sort_mode="multi",
+            filter_action="native",
+            markdown_options={"html": True}
+        )
 
-    # The card represents the parent container of the body section, and contains the data related to the compound
-    card = dbc.Card(id='co-content-card', children=[
-        dbc.CardHeader(html.H4(f'NSC {nsc} | {comp["preferred_name"][0]}')),
-        dbc.CardBody([html.Img(src=data_uri), html.Hr(), table])
-    ])
+        # The card represents the parent container of the body section, and contains the data related to the compound
+        card = dbc.Card(id='co-content-card', children=[
+            dbc.CardHeader(html.H4(f'NSC {nsc} | {comp["preferred_name"][0]}')),
+            dbc.CardBody([html.Img(src=data_uri), html.Hr(), table])
+        ])
 
     return card
 
