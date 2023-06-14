@@ -490,12 +490,12 @@ class DataService():
             survival_list.append(s)
         return survival_list
 
-    def get_km_graph(self, expid, nsc, group):
+    def get_km_graph(self, expid, group):
         """
         Creates the Kaplan-Meier Survival plot.
         :param expid: string: experiment ID of the invivo experiment
         :param nsc: string: NSC data within the experiment
-        :param group: string: group number within the experiment
+        :param group: string: group number within the experiment, 0-based index!
         :return: Figure: plotly figure representing the KM survival line
         """
         grp = int(group)
@@ -511,7 +511,8 @@ class DataService():
                     'tgroup.nsc_therapy.nsc': 1,
                     'expid': 1,
                     'cellline.cellname': 1,
-                    'cellline.panelcde': 1
+                    'cellline.panelcde': 1,
+                    'tgroup.group_type.group_type': 1
                 }
             }, {
                 '$unwind': {
@@ -521,24 +522,11 @@ class DataService():
             }, {
                 '$set': {
                     'animals': '$tgroup.animal.death_day',
-                    'nsc': '$tgroup.nsc_therapy.nsc'
+                    'nsc': '$tgroup.nsc_therapy.nsc',
+                    'group_type': '$tgroup.group_type.group_type'
                 }
             }, {
                 '$unset': 'tgroup'
-            }, {
-                '$match': {
-                    '$or': [
-                        {
-                            'nsc': {
-                                '$eq': 999999
-                            }
-                        }, {
-                            'nsc': {
-                                '$eq': int(nsc)
-                            }
-                        }
-                    ]
-                }
             }, {
                 '$set': {
                     'nsc': {'$first': '$nsc'}
@@ -549,10 +537,12 @@ class DataService():
         df = pd.DataFrame([d for d in data])
 
         # Prepare columns for KMF
-        delta = [1 for _ in range(len(df['animals'][grp]))]
-        time = df['animals'][grp]
-        time.sort()
-        group = [df['nsc'][grp] for x in delta]
+        delta = [1 for _ in range(len(df['animals'][grp]))] # makes a list of 1s equal to size of group
+        time = df['animals'][grp] # represents the day of death for each animal in the group
+        time.sort() # we sort the days in order to create a KM event table
+
+        #group = [df['nsc'][grp] for x in delta] no idea what this line was for, getting rid of it soon
+
 
         # Create KM Object
         kmf = KaplanMeierFitter()
@@ -569,19 +559,26 @@ class DataService():
         ci_df.columns = ['lower_ci', 'upper_ci']
         km_df = km_df.join(ci_df)
 
-        # Create the Plotly Figure
-        cellline = df['cellline'][grp]['cellname']
-        nsc = df['nsc'][grp]
-        title_txt = f'Invivo Study | Cell {cellline} | NSC {nsc}'
+        # Create a set of variables for dynamic titles
+        cellline = df['cellline'][grp]['cellname'] # collected from the query
+        panel = df['cellline'][grp]['panelcde']
+        nsc = df['nsc'][grp] # collected from initial query as well, sort of doing an 2 coordinate ID method
+        if df['group_type'][grp] == 'C':
+            treatment_txt = 'Control Group'
+        else:
+            treatment_txt = f'NSC {nsc}'
+        title_txt = f'Survival {expid} - Group {grp + 1}| Panel {panel} - Cell {cellline} | {treatment_txt}'
+
+        # Assemble the Plotly Figure
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=km_df.index, y=km_df['survival_rate'], line_shape='hv', mode='lines',
-                                 line_color='rgb(0,176,246)', name='Survival Line'))
+        fig.add_trace(go.Scatter(x=km_df.index, y=km_df['survival_rate'], line_shape='hv', mode='lines+markers',
+                                 line_color='rgb(0,176,246)', name='Survival Line', marker={'symbol': 'cross'}))
         fig.add_trace(go.Scatter(x=km_df.index, y=km_df['upper_ci'], line_shape='hv', mode='lines',
                                  line_color='rgba(255,255,255,0)', name='Upper Confidence Interval', showlegend=False))
         fig.add_trace(go.Scatter(x=km_df.index, y=km_df['lower_ci'], fill='tonexty', line_shape='hv', mode='lines',
                                  fillcolor='rgba(0,176,246,0.2)', line_color='rgba(255,255,255,0)',
                                  name='Lower Confidence Interval', showlegend=False))
-        fig.update_layout(title_text=title_txt, autosize=True)
+        fig.update_layout(title_text=title_txt, title_x=0.5, autosize=True)
         fig.update_xaxes(range=[0, (km_df.index.max() * 1.05)], title_text='Timeline (days)')
         fig.update_yaxes(title_text='Survival Rate')
 
@@ -591,8 +588,9 @@ class DataService():
         # combine experiments that refer to an old control or somehow connect experiments to their
         # control parents.  Seems odd.
         try:
-            control_trace = self.get_km_control(df[df['nsc'] == 999999].copy())
-            fig.add_trace(control_trace)
+            if df['group_type'][grp] != 'C':
+                control_trace = self.get_km_control(df[df['group_type'] == 'C'].head(1).copy()) # in the event of 1+ control
+                fig.add_trace(control_trace)
         except:
             print('Control Exception encountered.')
 
@@ -621,8 +619,8 @@ class DataService():
             # Add in slightly transformed survival rates
             km2_df['survival_rate'] = self.make_survivals(km2_df)
 
-            control_trace = go.Scatter(x=km2_df.index, y=km2_df['survival_rate'], line_shape='hv', mode='lines',
-                                       line_color='rgb(0,0,0)', name='Control')
+            control_trace = go.Scatter(x=km2_df.index, y=km2_df['survival_rate'], line_shape='hv', mode='lines+markers',
+                                       line_color='rgb(0,0,0)', name='Control', marker={'symbol': 'cross'})
             return control_trace
         else:
             delta = [1 for _ in range(len(df['animals']))]
@@ -832,43 +830,47 @@ class DataService():
         )
         return fig
 
-    def get_invivo_group_numbers(self, nsc, expid):
+    def get_invivo_experiment_nbrs(self, expid):
         """
-        Retrieve the group numbers within the experiment
-        :param nsc: string: NSC to be examined within the experiment
-        :param expid: string: experiment ID of the invivo experiment
-        :return: list(range): list of the animal group numbers of the experiment
+        Retrieve the specific experiment number for a given experiment ID. This is needed when an experiment has been
+        conducted under the same ID at varying points in time-- sometimes over the course of many years.
+        :param expid: string: the experiment ID
+        :return: list: a list of experiment numbers; sometimes it will be a list of length 1
         """
-        pipeline = [
+        return [d for d in self.INVIVO_COLL.aggregate([
             {
                 '$match': {
                     'expid': expid
                 }
             }, {
                 '$project': {
+                    'exp_nbr': 1,
+                    '_id': 0
+                }
+            }
+        ])]
+
+    def get_invivo_group_numbers(self, exp, expid):
+        """
+        Retrieve the group numbers within the experiment
+        :param exp: int: experiment number to be examined within the experiment ID
+        :param expid: string: experiment ID of the invivo experiment
+        :return: list(range): list of the animal group numbers of the experiment
+        """
+        pipeline = [
+            {
+                '$match': {
+                    'expid': expid,
+                    'exp_nbr': int(exp)
+                }
+            }, {
+                '$project': {
                     'tgroup.animal': 1,
                     '_id': 0,
-                    'tgroup.nsc_therapy.nsc': 1
                 }
-            }, {
+            },{
                 '$unwind': {
-                    'path': '$tgroup',
-                    'preserveNullAndEmptyArrays': False
-                }
-            }, {
-                '$set': {
-                    'animals': '$tgroup.animal.animal_nbr',
-                    'nsc': '$tgroup.nsc_therapy.nsc'
-                }
-            }, {
-                '$match': {
-                    'nsc': int(nsc)
-                }
-            }, {
-                '$set': {
-                    'nsc': {
-                        '$first': '$nsc'
-                    }
+                    'path': '$tgroup'
                 }
             }, {
                 '$count': 'count'
