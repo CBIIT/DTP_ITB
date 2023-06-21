@@ -47,6 +47,7 @@ class DataService():
         self.INVIVO_COLL = self.DB.get_collection('invivo')
         self.COMPOUNDS_COLL = self.DB.get_collection('compounds')
         self.CELLS_COLL = self.DB.get_collection('fivedose_cells')
+        self.ONCOKB_COLL = self.DB.get_collection('oncokb')
         print(f'Collections initialized...')
 
         # Chart Styles
@@ -68,6 +69,19 @@ class DataService():
         symbols = SymbolValidator().values
         random.shuffle(symbols)
         self.SYMBOLS = symbols
+
+        # OncoKB alteration Mapping
+        self.ONCOKB_ALT_TYPE_MAP = {
+            'Not Found': None,
+            'Frame_Shift_Del': 'TRUNC',
+            'Frame_Shift_Ins': 'TRUNC',
+            'In_Frame_Del': 'INFRAME',
+            'In_Frame_Ins': 'INFRAME',
+            'Missense_Mutation': 'MISSENSE',
+            'Nonsense_Mutation': 'MISSENSE',
+            'Nonstop_Mutation': 'MISSENSE',
+            'Splice_Site': None
+        }
 
     def __del__(self):
         """
@@ -1449,6 +1463,173 @@ class DataService():
         fig.update_yaxes(tickmode="linear")
 
         return fig
+
+    def get_onco_by_gene_df(self, gene):
+        """
+        Retrieve oncoKB data for
+        :param cell:
+        :param gene:
+        :return:
+        """
+        df = pd.DataFrame([d for d in self.ONCOKB_COLL.aggregate([
+                    {
+                        '$match': {
+                            'hugogenesymbol.hugogenesymboldescription': gene
+                        }
+                    }, {
+                        '$project': {
+                            'sample': '$cellline.cellname',
+                            'gene': '$hugogenesymbol.hugogenesymboldescription',
+                            'alteration': '$hgvscdnachange',
+                            'type': '$variantclass.variantclassdescription',
+                            '_id': 0
+                        }
+                    }
+                ]
+            )
+        ])
+        df['type'] = df['type'].map(lambda x: self.ONCOKB_ALT_TYPE_MAP[x])
+
+        return df
+
+    def get_onco_by_cell(self, cell):
+        """
+        Search for all Oncokb data for a particular cell line.
+        :param cell: string: the cell line name
+        :return: DataFrame: a dataframe of the oncokb data
+        """
+        df = pd.DataFrame([d for d in self.ONCOKB_COLL.aggregate([
+                    {
+                        '$match': {
+                            'cellline.cellname': cell
+                        }
+                    }, {
+                        '$project': {
+                            'sample': '$cellline.cellname',
+                            'gene': '$hugogenesymbol.hugogenesymboldescription',
+                            'alteration': '$hgvscdnachange',
+                            'type': '$variantclass.variantclassdescription',
+                            '_id': 0
+                        }
+                    }
+                ]
+            )
+        ])
+
+        df['type'] = df['type'].map(lambda x: self.ONCOKB_ALT_TYPE_MAP[x])
+
+        return df
+
+    def get_oncoprint_data_filtered(self):
+        """
+        Retrieve all data for a full OncoKB print excluding not found variation types
+        :return: DataFrame: a dataframe of the oncokb data in oncoprint format (sample, gene, alteration, type)
+        """
+        df = pd.DataFrame([d for d in self.ONCOKB_COLL.aggregate([
+                    {
+                        '$match': {
+                            'variantclass.variantclassseqnbr': {
+                                '$ne': 0
+                            }
+                        }
+                    }, {
+                        '$project': {
+                            'sample': '$cellline.cellname',
+                            'gene': '$hugogenesymbol.hugogenesymboldescription',
+                            'alteration': '$hgvscdnachange',
+                            'type': '$variantclass.variantclassdescription',
+                            '_id': 0
+                        }
+                    }, {
+                        '$limit': 600
+                    }
+                ]
+            )
+        ])
+
+        df['type'] = df['type'].map(self.ONCOKB_ALT_TYPE_MAP)
+
+        return df
+
+    def get_oncoprint_data_unfiltered(self):
+        """
+        Retrieve all data for a full OncoKB print including not found variation types
+        :return: DataFrame: a dataframe of the oncokb data in oncoPrint format (sample, gene, alteration, type)
+        """
+        df = pd.DataFrame([d for d in self.ONCOKB_COLL.aggregate([
+                    {
+                        '$project': {
+                            'sample': '$cellline.cellname',
+                            'gene': '$hugogenesymbol.hugogenesymboldescription',
+                            'alteration': '$hgvscdnachange',
+                            'type': '$variantclass.variantclassdescription',
+                            '_id': 0
+                        }
+                    }
+                ]
+            )
+        ])
+
+        df['type'] = df['type'].map(lambda x: self.ONCOKB_ALT_TYPE_MAP[x])
+        return df
+
+    def get_onco_genes(self):
+        return [d for d in self.ONCOKB_COLL.aggregate(
+            [
+                {
+                    '$match': {
+                        'hugogenesymbol.hugogenesymboldescription': {
+                            '$ne': None
+                            }
+                        }
+                }, {
+                    '$group': {
+                        '_id': "$hugogenesymbol.hugogenesymboldescription",
+                        'count': {
+                            '$sum': 1
+                        }
+                    }
+                }, {
+                    '$sort': {
+                        '_id': 1
+                    }
+                }, {
+                    '$project': {
+                        '_id': 0,
+                        'gene': '$_id'
+                    }
+                }
+            ]
+        )]
+
+    def get_onco_cells(self):
+        return [d for d in self.ONCOKB_COLL.aggregate(
+            [
+                {
+                    '$match': {
+                        'cellline.cellname': {
+                            '$ne': None
+                            }
+                        }
+                }, {
+                    '$group': {
+                        '_id': "$cellline.cellname",
+                        'count': {
+                            '$sum': 1
+                        }
+                    }
+                }, {
+                    '$sort': {
+                        '_id': 1
+                    }
+                }, {
+                    '$project': {
+                        '_id': 0,
+                        'cellname': '$_id'
+                    }
+                }
+            ]
+        )]
 
 # This line ensures it is modular and semi-singleton. I say semi-singelton because I know that, for some reason,
 # Dash initializes two modules of DataService. I would have to do something hacky to ensure there is only one within

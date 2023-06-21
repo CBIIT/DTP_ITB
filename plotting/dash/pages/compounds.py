@@ -57,6 +57,7 @@ def enable_dropdown(radio):
         return False
     else:
         return True
+
 @dash.callback(
     Output("co-nsc-dropdown", "options"),
     Input("co-nsc-dropdown", "search_value"),
