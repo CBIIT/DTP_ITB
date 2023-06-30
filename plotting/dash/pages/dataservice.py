@@ -47,12 +47,16 @@ class DataService():
         self.INVIVO_COLL = self.DB.get_collection('invivo')
         self.COMPOUNDS_COLL = self.DB.get_collection('compounds')
         self.CELLS_COLL = self.DB.get_collection('fivedose_cells')
-        self.ONCOKB_COLL = self.DB.get_collection('oncokb')
+        self.ONCOKB_COLL = self.DB.get_collection('oncoprint')
         print(f'Collections initialized...')
 
         # Chart Styles
         self.PLOT_STYLE_DF = pd.read_csv(
             os.path.abspath('../dash/assets/plot_styles.csv'))  # /dash/assets/    /dash/pages/
+
+        # OncoKB mRNA Expression
+        self.MRNA_ZSC = pd.read_csv('../dash/assets/mrna_zscores.txt', delimiter='\t').drop('Entrez_Gene_Id', axis=1).set_index(
+            'Hugo_Symbol').transpose().fillna(0)
 
         # Creates a specific set of colors that contrast well against a light background
         colors = []
@@ -1474,21 +1478,17 @@ class DataService():
         df = pd.DataFrame([d for d in self.ONCOKB_COLL.aggregate([
                     {
                         '$match': {
-                            'hugogenesymbol.hugogenesymboldescription': gene
+                            'gene': gene
                         }
                     }, {
                         '$project': {
-                            'sample': '$cellline.cellname',
-                            'gene': '$hugogenesymbol.hugogenesymboldescription',
-                            'alteration': '$hgvscdnachange',
-                            'type': '$variantclass.variantclassdescription',
                             '_id': 0
                         }
                     }
                 ]
             )
         ])
-        df['type'] = df['type'].map(lambda x: self.ONCOKB_ALT_TYPE_MAP[x])
+        #df['type'] = df['type'].map(lambda x: self.ONCOKB_ALT_TYPE_MAP[x])
 
         return df
 
@@ -1501,14 +1501,10 @@ class DataService():
         df = pd.DataFrame([d for d in self.ONCOKB_COLL.aggregate([
                     {
                         '$match': {
-                            'cellline.cellname': cell
+                            'sample': cell
                         }
                     }, {
                         '$project': {
-                            'sample': '$cellline.cellname',
-                            'gene': '$hugogenesymbol.hugogenesymboldescription',
-                            'alteration': '$hgvscdnachange',
-                            'type': '$variantclass.variantclassdescription',
                             '_id': 0
                         }
                     }
@@ -1516,7 +1512,7 @@ class DataService():
             )
         ])
 
-        df['type'] = df['type'].map(lambda x: self.ONCOKB_ALT_TYPE_MAP[x])
+        #df['type'] = df['type'].map(lambda x: self.ONCOKB_ALT_TYPE_MAP[x])
 
         return df
 
@@ -1528,16 +1524,12 @@ class DataService():
         df = pd.DataFrame([d for d in self.ONCOKB_COLL.aggregate([
                     {
                         '$match': {
-                            'variantclass.variantclassseqnbr': {
-                                '$ne': 0
+                            'type': {
+                                '$ne': None
                             }
                         }
                     }, {
                         '$project': {
-                            'sample': '$cellline.cellname',
-                            'gene': '$hugogenesymbol.hugogenesymboldescription',
-                            'alteration': '$hgvscdnachange',
-                            'type': '$variantclass.variantclassdescription',
                             '_id': 0
                         }
                     }, {
@@ -1547,7 +1539,7 @@ class DataService():
             )
         ])
 
-        df['type'] = df['type'].map(self.ONCOKB_ALT_TYPE_MAP)
+        #df['type'] = df['type'].map(self.ONCOKB_ALT_TYPE_MAP)
 
         return df
 
@@ -1559,10 +1551,6 @@ class DataService():
         df = pd.DataFrame([d for d in self.ONCOKB_COLL.aggregate([
                     {
                         '$project': {
-                            'sample': '$cellline.cellname',
-                            'gene': '$hugogenesymbol.hugogenesymboldescription',
-                            'alteration': '$hgvscdnachange',
-                            'type': '$variantclass.variantclassdescription',
                             '_id': 0
                         }
                     }
@@ -1570,21 +1558,25 @@ class DataService():
             )
         ])
 
-        df['type'] = df['type'].map(lambda x: self.ONCOKB_ALT_TYPE_MAP[x])
+        #df['type'] = df['type'].map(lambda x: self.ONCOKB_ALT_TYPE_MAP[x])
         return df
 
     def get_onco_genes(self):
+        """
+        Retrieves a list of the genes identified in the oncokb cell line.
+        :return: list: strings of genes in oncoKB dataset
+        """
         return [d for d in self.ONCOKB_COLL.aggregate(
             [
                 {
                     '$match': {
-                        'hugogenesymbol.hugogenesymboldescription': {
+                        'gene': {
                             '$ne': None
                             }
                         }
                 }, {
                     '$group': {
-                        '_id': "$hugogenesymbol.hugogenesymboldescription",
+                        '_id': "$gene",
                         'count': {
                             '$sum': 1
                         }
@@ -1603,17 +1595,21 @@ class DataService():
         )]
 
     def get_onco_cells(self):
+        """
+        Retrieves all the cell lines according to OncoKB dataset
+        :return: list: list of strings of cell lines.
+        """
         return [d for d in self.ONCOKB_COLL.aggregate(
             [
                 {
                     '$match': {
-                        'cellline.cellname': {
+                        'sample': {
                             '$ne': None
                             }
                         }
                 }, {
                     '$group': {
-                        '_id': "$cellline.cellname",
+                        '_id': "$sample",
                         'count': {
                             '$sum': 1
                         }
@@ -1630,6 +1626,39 @@ class DataService():
                 }
             ]
         )]
+
+    def get_onco_mrna_plot(self, genes):
+        """
+        Create a heatmap derived from the mrna_zscores.txt file in assets.
+        :param genes: list: list of genes to include against cell lines.
+        :return:
+        """
+        if genes[0] == 'all':
+            df = self.MRNA_ZSC
+        else:
+            df = self.MRNA_ZSC[genes]
+
+        mrna_plot = go.Figure(data=go.Heatmap(x=df.columns,
+                                              y=df.index,
+                                              z=df.values,
+                                              colorscale=['green', 'yellow', 'orange', 'red'],
+                                              showlegend=False,
+                                              hoverongaps=False,
+                                              hovertemplate="Gene %{x}<br>Cell %{y}<br>Z-score %{z}<extra></extra>"
+                                              ))
+        mrna_plot.update_traces(colorbar_title_text='Z-score', selector=dict(type='heatmap'))
+        mrna_plot.update_layout(
+            title=f'mRNA Z-Scores (5 Platform Gene Transcript; diploid)',
+            title_x=0.5,
+            xaxis_title='Gene',
+            yaxis_title='Cell Line',
+            height=(60 * 14)
+
+        )
+        mrna_plot.update_yaxes(tickmode="linear")
+
+
+        return mrna_plot
 
 # This line ensures it is modular and semi-singleton. I say semi-singelton because I know that, for some reason,
 # Dash initializes two modules of DataService. I would have to do something hacky to ensure there is only one within

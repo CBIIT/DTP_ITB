@@ -12,7 +12,8 @@ setup(
               'matplotlib',
               'pymongo',
               'dotenv',
-              'rdkit'
+              'rdkit',
+              'dash_bio'
               ],
     url='',
     license='',
