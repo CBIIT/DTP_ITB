@@ -14,7 +14,6 @@ from rdkit.Chem import Draw, AllChem, rdDistGeom, rdDepictor
 import dash_bootstrap_components as dbc
 from rdkit.Chem.Draw import rdMolDraw2D
 
-
 from .dataservice import dataService
 
 # The page is associated with the main application by this manner
@@ -48,6 +47,7 @@ left_select = dbc.Card(id='co-sel-card', body=True, children=[
     ])
 ])
 
+
 @dash.callback(
     Output("co-nsc-dropdown", "disabled"),
     Input("co-radio", "value")
@@ -57,6 +57,7 @@ def enable_dropdown(radio):
         return False
     else:
         return True
+
 
 @dash.callback(
     Output("co-nsc-dropdown", "options"),
@@ -153,7 +154,6 @@ def get_compound(nclicks, nsc):
     svg.FinishDrawing()
     data_uri = "data:image/svg+xml;charset=utf-8," + urllib.parse.quote(svg.GetDrawingText())
 
-
     # Experiment should have 'Expid' , 'Type' , 'Description'
     df = dataService.get_all_expids_by_nsc(nsc)
     if df.empty:
@@ -233,6 +233,7 @@ def get_comp_table(comp):
 
     table = dbc.Table(table_header + table_body, bordered=True)
     return table
+
 
 # The layout variable represents the root container for the compounds page in which
 # all the components are contained.

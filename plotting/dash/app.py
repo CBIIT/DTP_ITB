@@ -21,12 +21,18 @@ app = Dash(
     __name__,
     use_pages=True,
     title='DCTD Data Plots',
-    external_stylesheets=[dbc.themes.BOOTSTRAP],
+    external_stylesheets=[dbc.themes.SPACELAB],
     meta_tags=[
         {"name": "viewport", "content": "width=device-width, initial-scale=1"}
     ],
     suppress_callback_exceptions=True
 )
+
+# Variable for CSS spacing
+ROW_PADDING = {
+    "paddingTop": "calc(var(--bs-gutter-x) * .5)",
+    "paddingBottom": "calc(var(--bs-gutter-x) * .5)"
+}
 
 
 # Initialize the shared data and store it in dcc.store
@@ -235,8 +241,7 @@ nav = dbc.Nav(
         dbc.NavItem(dbc.NavLink("By Cell", active="exact", href="/cells", id='cells-nav'))
 
     ],
-    pills=True,
-    navbar=True
+    pills=True
 )
 
 # The layout is the root of the application and its child pages. The navbar will be present at all times,
@@ -244,22 +249,61 @@ nav = dbc.Nav(
 # routed.
 app.layout = dbc.Container(
     fluid=True,
-    class_name='text-center',
-    children=[
-        dbc.Row(html.H1('DCTD Graphs and Plots')),
-        dbc.Row(dbc.Col(dbc.Navbar(nav), width=12, id='nav-bar-col'), id='nav-bar-row'),
-        dbc.Row(dbc.Col(dash.page_container, width=12), id='page-container-col'),
-        html.Br(),
-        dcc.Loading([
-            dcc.Store(id='app-store'),
-            html.Div(id='initializer')
-        ])
-    ]
-)
 
+    children=[
+        # This first div is for screen readers
+        html.Div(
+            html.A('Skip to Content', title='Skip to Content', href='#mainContent'),
+            className='skipToContent',
+            style={
+                'left': '-9999px',
+                'height': '1px',
+                'overflow': 'hidden',
+                'position': 'absolute',
+                'text-align': 'left',
+                'width': '1px'
+            }
+        ),
+        dbc.Row(
+            dbc.Col(
+                html.Img(src='/assets/dctd_logo.png'))
+        ),
+        dbc.Row(
+            dbc.Col(
+                dbc.NavLink(
+                    html.Img(src='/assets/ribbon.png',
+                             alt='Developmental Therapeutics Program (DTP)'),
+                    style={'backgroundImage': 'linear-gradient(#7191b3,#446e9b 50%,#3f658f)'}
+                    )
+                )
+        ),
+        dbc.Row(
+            dbc.Col(
+                dbc.Card([
+                    dbc.CardHeader(nav, id='nav-links'),
+                    dbc.CardBody([
+                        dash.page_container,
+                        html.Br(),
+                        dcc.Loading([
+                            dcc.Store(id='app-store'),
+                            html.Div(id='initializer')
+                        ])
+                    ], id='mainContent')
+                ], color='dark', outline=True)
+            ),
+            style=ROW_PADDING
+        )
+    ],
+    class_name='text-center',
+    style={'color': '#2d2d2d'}
+)
 
 # ********** Start The server Here **********
 # debug enables a page debug section that helps with exceptions and other errors
 if __name__ == '__main__':
     app.run_server(debug=True)
 # *******************************************
+
+
+# dbc.Row(nav, id='nav-bar-row'),
+#       dbc.Row(dbc.Col(dash.page_container, width=12), id='main-content'),

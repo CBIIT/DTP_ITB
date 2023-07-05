@@ -1641,7 +1641,7 @@ class DataService():
         mrna_plot = go.Figure(data=go.Heatmap(x=df.columns,
                                               y=df.index,
                                               z=df.values,
-                                              colorscale=['green', 'yellow', 'orange', 'red'],
+                                              colorscale=['violet','indigo','blue','green', 'yellow', 'orange', 'red'],
                                               showlegend=False,
                                               hoverongaps=False,
                                               hovertemplate="Gene %{x}<br>Cell %{y}<br>Z-score %{z}<extra></extra>"
